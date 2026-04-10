@@ -1,17 +1,21 @@
-export type ProviderType = "private" | "company";
+export type LenderType = "private" | "company";
 
 export interface HomeProduct {
   id: string;
-  title: string;
+  name: string;
   city: string;
   rating: number;
   pricePerDay: number;
   imageUrl: string;
-  providerType: ProviderType;
+  lenderType: LenderType;
 }
 
 export interface HomeCategory {
   id: string;
   title: string;
   products: HomeProduct[];
+}
+
+export default function HomeTypesPage() {
+  return null;
 }
