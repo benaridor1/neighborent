@@ -1,0 +1,80 @@
+---
+description: 
+alwaysApply: true
+---
+
+You are working on a new full-stack project called RentUp.
+
+Tech stack:
+- Frontend: Next.js 15
+- Styling: Tailwind CSS
+- UI Components: shadcn/ui
+- Backend: NestJS
+- Database: PostgreSQL
+- ORM: Prisma
+- Authentication: Auth.js or Clerk
+- File storage: Cloudinary or S3
+
+General rules:
+1. Keep frontend and backend fully separated.
+2. Use TypeScript everywhere.
+3. Do not mix UI code with business logic.
+4. Do not create large monolithic files.
+5. Prefer clean, modular, maintainable code over shortcuts.
+6. Keep naming consistent, explicit, and production-ready.
+7. Reuse code where appropriate, but do not over-abstract too early.
+8. Do not introduce unnecessary libraries or frameworks.
+9. Keep the codebase scalable and easy to extend.
+10. When structure is not explicitly defined yet, make clean and minimal decisions that can scale later.
+
+Frontend rules:
+1. Use Next.js 15 App Router only.
+2. Every major page must be isolated and maintainable.
+3. If a page becomes too large, split it into smaller components.
+4. Keep shared UI separate from feature-specific UI.
+5. Use shadcn/ui as the main component foundation.
+6. Use Tailwind CSS for styling.
+7. Keep layouts, forms, cards, modals, and filters reusable where it makes sense.
+8. Do not place unrelated pages or page logic in the same file.
+9. Keep client and server component decisions explicit.
+10. Organize frontend code so each screen can evolve independently.
+11. Every page and component must be responsive across mobile, tablet, and desktop.
+
+Backend rules:
+1. Build the backend as a NestJS API.
+2. Organize backend code by business domains/modules.
+3. Keep controllers, services, DTOs, and data access clearly separated.
+4. Put business logic in services, not in controllers.
+5. Keep validation explicit and structured.
+6. Keep authentication and authorization centralized.
+7. Avoid tightly coupling API responses to raw database structure.
+8. Keep the backend modular, clear, and easy to extend.
+
+Architecture rules:
+1. Frontend and backend are separate layers with separate responsibilities.
+2. Shared concerns should be isolated cleanly.
+3. Do not hardcode secrets, URLs, ports, credentials, or environment-specific values.
+4. Use environment variables for configuration.
+5. Keep the project compatible with future deployment on a production server.
+6. Avoid decisions that tightly couple the app to a local machine or temporary setup.
+
+Implementation rules:
+1. Before implementing a feature, first determine whether it belongs to frontend, backend, or both.
+2. For non-trivial work, first propose which files should be created or modified.
+3. Then implement the code.
+4. Keep generated code aligned with the chosen stack and these rules.
+5. Do not assume a detailed folder structure unless it has been explicitly defined.
+
+Code quality rules:
+1. Use clear and explicit types.
+2. Avoid any when possible.
+3. Keep functions focused and single-purpose.
+4. Remove dead code and avoid placeholder code unless clearly marked.
+5. Add comments only when they explain intent, not obvious syntax.
+6. Keep imports clean and organized.
+
+Working style:
+1. Make reasonable technical decisions without unnecessary complexity.
+2. Prefer clarity and maintainability over speed hacks.
+3. When requirements are still general, avoid inventing overly specific architecture.
+4. Build in a way that supports growth without overengineering.
