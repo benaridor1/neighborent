@@ -3,7 +3,7 @@ import "./globals.css";
 import { SiteShell } from "../components/layout/site-shell";
 
 export const metadata: Metadata = {
-  title: "RentUp",
+  title: "neighborent",
   description: "Marketplace for renting equipment from private lenders and companies.",
 };
 

@@ -65,7 +65,7 @@ export function LoginPage() {
       <section className="hidden bg-[linear-gradient(180deg,#f8f5ee_0%,#f6f2e8_100%)] px-10 py-8 lg:flex lg:flex-col lg:justify-between">
         <div className="text-right">
           <Link href="/" className="text-3xl font-black text-zinc-900">
-            RENTO
+            neighborent
           </Link>
         </div>
         <div className={isRtl ? "text-right" : "text-left"} dir={isRtl ? "rtl" : "ltr"}>

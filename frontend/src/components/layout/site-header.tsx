@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   CircleHelp,
@@ -79,7 +80,7 @@ export function SiteHeader() {
           )}
         </div>
         <Link href="/" className="text-[34px] font-black leading-none tracking-tight text-zinc-900">
-          RENTO
+          neighborent
         </Link>
       </header>
 
@@ -206,11 +207,22 @@ interface MenuItemProps {
 }
 
 function MenuItem({ href = "#", icon, label, onNavigate }: MenuItemProps) {
+  const router = useRouter();
+
   return (
-    <Link href={href} onClick={onNavigate} className="flex items-center justify-between rounded-lg px-2 py-2 text-zinc-900 hover:bg-zinc-50">
+    <button
+      type="button"
+      onClick={() => {
+        onNavigate();
+        if (href && href !== "#") {
+          router.push(href);
+        }
+      }}
+      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-zinc-900 hover:bg-zinc-50"
+    >
       <span className="text-base font-medium">{label}</span>
       {icon}
-    </Link>
+    </button>
   );
 }
 

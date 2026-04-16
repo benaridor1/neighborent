@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../lib/locale-context";
 import { activateSupportChat } from "../../lib/messages.mock";
+import { DynamicBackLink } from "../../components/layout/dynamic-back-link";
 
 export function HelpPage() {
   const { language, t } = useLocale();
@@ -27,13 +27,7 @@ export function HelpPage() {
     <main className="min-h-[calc(100vh-70px)] bg-white" dir={isRtl ? "rtl" : "ltr"}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 md:px-8 lg:px-10">
         <header className="w-full">
-          <Link
-            href="/"
-            className={`inline-flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900 ${isRtl ? "self-end" : "self-start"}`}
-          >
-            <ChevronLeft className={isRtl ? "h-4 w-4 rotate-180" : "h-4 w-4"} aria-hidden />
-            {t("backToHome")}
-          </Link>
+          <DynamicBackLink className={`inline-flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900 ${isRtl ? "self-end" : "self-start"}`} />
           <h1 className={`mt-4 text-3xl font-black tracking-tight text-zinc-900 sm:text-4xl ${isRtl ? "text-right" : "text-left"}`}>
             {t("helpPageTitle")}
           </h1>

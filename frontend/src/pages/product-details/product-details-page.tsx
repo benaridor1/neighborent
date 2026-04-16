@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FavoriteToggleButton } from "../../components/favorite-toggle-button";
 import { getProductDetails } from "./data/product-details.mock";
 import { BookingPanel } from "./components/booking-panel";
@@ -9,6 +8,7 @@ import { DetailsHeader } from "./components/details-header";
 import { ImageGallery } from "./components/image-gallery";
 import { SimilarItem } from "./components/similar-item";
 import { useLocale } from "../../lib/locale-context";
+import { DynamicBackLink } from "../../components/layout/dynamic-back-link";
 
 interface ProductDetailsPageProps {
   productId: string;
@@ -23,12 +23,11 @@ export function ProductDetailsPage({ productId }: ProductDetailsPageProps) {
     <main className="min-h-[calc(100vh-70px)] bg-zinc-50" key={product.id}>
       <div className="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3" dir={isRtl ? "rtl" : "ltr"}>
-          <Link
-            href={product.rentalCompanyId ? `/rental-companies/${product.rentalCompanyId}` : "/"}
-            className="text-sm font-medium text-zinc-700"
-          >
-            {product.rentalCompanyId ? t("backToRentalCatalog") : t("backToHome")}
-          </Link>
+          <DynamicBackLink
+            fallbackHref={product.rentalCompanyId ? `/rental-companies/${product.rentalCompanyId}` : "/"}
+            fallbackLabel={product.rentalCompanyId ? t("backToRentalCatalog") : t("backToHome")}
+            className="inline-flex items-center gap-1 text-sm font-medium text-zinc-700"
+          />
           <FavoriteToggleButton productId={product.id} variant="large" />
         </div>
 

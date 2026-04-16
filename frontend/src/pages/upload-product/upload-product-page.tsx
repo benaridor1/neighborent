@@ -14,6 +14,8 @@ import {
 import { isUserAuthenticated } from "../../lib/auth-session";
 import { getCityOptionsForLanguage } from "../../lib/geo-search-options";
 import { useLocale } from "../../lib/locale-context";
+import { saveUploadedOwnerListing } from "../../lib/uploaded-owner-listings";
+import type { DemoCategoryKey } from "../../lib/demo-category-images";
 
 const LISTING_DRAFT_KEY = "rentup:listing-draft-v1";
 const PHOTO_SLOTS = ["front", "back", "right", "left"] as const;
@@ -43,6 +45,7 @@ export function UploadProductPage() {
   const [modelName, setModelName] = useState("");
   const [priceDay, setPriceDay] = useState("");
   const [deposit, setDeposit] = useState("");
+  const [unitsTotal, setUnitsTotal] = useState("1");
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<Record<PhotoSlot, File | null>>({
     front: null,
@@ -122,7 +125,8 @@ export function UploadProductPage() {
   const validateStep1 = () => Boolean(category && city && condition && modelName.trim());
   const validateStep2 = () => {
     const price = Number(priceDay);
-    return Boolean(images.front && !Number.isNaN(price) && price > 0);
+    const units = Number(unitsTotal);
+    return Boolean(images.front && !Number.isNaN(price) && price > 0 && Number.isInteger(units) && units > 0);
   };
 
   const goNext = () => {
@@ -162,6 +166,7 @@ export function UploadProductPage() {
         modelName,
         priceDay,
         deposit,
+        unitsTotal,
         description,
         step: step,
       };
@@ -184,6 +189,13 @@ export function UploadProductPage() {
       return;
     }
     setBanner(null);
+    const selectedCategory = (category || "photo") as DemoCategoryKey;
+    saveUploadedOwnerListing({
+      name: modelName.trim(),
+      pricePerDay: Number(priceDay),
+      unitsTotal: Number(unitsTotal),
+      category: selectedCategory,
+    });
     router.push("/my-products?mode=owner&ownerSub=available");
   };
 
@@ -214,6 +226,11 @@ export function UploadProductPage() {
         <header className="mb-8 text-center">
           <h1 className="text-3xl font-black tracking-tight text-emerald-950 sm:text-4xl">{t("uploadProductTitle")}</h1>
           <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-600">{t("uploadProductSubtitle")}</p>
+          <p className="mx-auto mt-3 max-w-xl rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {language === "he"
+              ? "לאחר העלאת מוצר, המודעה תעבור אימות לפני פרסום."
+              : "After upload, the listing will be verified before publishing."}
+          </p>
         </header>
 
         <nav aria-label="Progress" className="mb-8 flex items-center justify-center gap-2 sm:gap-4">
@@ -370,6 +387,19 @@ export function UploadProductPage() {
                     className={inputClass}
                   />
                 </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                <label className="block text-sm font-semibold text-zinc-900">כמות יחידות זמינות להשכרה*</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={unitsTotal}
+                  onChange={(e) => setUnitsTotal(e.target.value)}
+                  placeholder="לדוגמה: 3"
+                  className={inputClass}
+                />
               </div>
               <p className="mt-4 rounded-xl bg-amber-50/90 px-4 py-3 text-xs leading-relaxed text-amber-950 ring-1 ring-amber-100">{t("uploadFeeNotice")}</p>
             </section>

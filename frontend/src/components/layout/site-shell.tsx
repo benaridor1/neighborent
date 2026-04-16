@@ -1,9 +1,12 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { SiteHeader } from "./site-header";
+import { SiteFooter } from "./site-footer";
 import { LocaleProvider } from "../../lib/locale-context";
 import { LocaleCurrencyModal } from "./locale-currency-modal";
+import { useEffect } from "react";
+import { rememberNavigation } from "../../lib/navigation-history";
 
 interface SiteShellProps {
   children: React.ReactNode;
@@ -11,12 +14,21 @@ interface SiteShellProps {
 
 export function SiteShell({ children }: SiteShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const hideHeader = pathname === "/login" || pathname === "/register";
+  const hideFooter = pathname === "/login" || pathname === "/register";
+  const query = searchParams?.toString() ?? "";
+
+  useEffect(() => {
+    const nextPath = query ? `${pathname}?${query}` : pathname;
+    rememberNavigation(nextPath);
+  }, [pathname, query]);
 
   return (
     <LocaleProvider>
       {!hideHeader && <SiteHeader />}
       {children}
+      {!hideFooter && <SiteFooter />}
       <LocaleCurrencyModal />
     </LocaleProvider>
   );

@@ -200,7 +200,7 @@ const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     myProductsIntro: "מוצרים שאתם משכירים לאחרים לעומת מוצרים שאתם שוכרים — ובכל קטגוריה סינון לפי מצב נוכחי.",
     myProductsMainOwner: "מוצרים שלי",
     myProductsMainRenter: "מוצרים שאני שוכר",
-    myProductsOwnerAvailable: "זמינים",
+    myProductsOwnerAvailable: "זמינים להשכרה",
     myProductsOwnerRentalRequests: "בקשות להשכרה",
     myProductsOwnerUpcoming: "השכרה עתידית",
     myProductsOwnerLeased: "מושכרים",
@@ -340,7 +340,7 @@ const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     uploadDraftSaved: "הטיוטה נשמרה במכשיר זה (דמו).",
     uploadPublishedDemo: "המוצר נשלח לפרסום (דמו — ללא שרת).",
     uploadErrorStep1: "נא למלא קטגוריה, עיר, מצב ושם דגם.",
-    uploadErrorStep2: "נא להעלות לפחות תמונת חזית, ומחיר תקין.",
+    uploadErrorStep2: "נא להעלות לפחות תמונת חזית, מחיר תקין וכמות יחידות גדולה מ-0.",
   },
   en: {
     login: "Login",

@@ -21,11 +21,11 @@ export function HomeCard({ product, layout = "carousel" }: HomeCardProps) {
   return (
     <article
       className={`relative overflow-hidden rounded-xl border border-zinc-100 bg-white ${
-        layout === "grid" ? "mx-auto w-full max-w-[260px]" : "w-[154px] shrink-0"
+        layout === "grid" ? "mx-auto w-full max-w-[315px]" : "w-[188px] shrink-0"
       }`}
     >
       <Link href={`/products/${product.id}`} className="block">
-        <div className="relative h-[108px] bg-zinc-100">
+        <div className="relative h-[132px] bg-zinc-100">
           <Image src={product.imageUrl} alt={product.name} fill sizes="(max-width: 768px) 100vw, 25vw" className="object-cover" />
           <span className="absolute end-2 top-2 rounded-full bg-white px-2 py-0.5 text-[10px] text-zinc-700">{t("favorite")}</span>
         </div>

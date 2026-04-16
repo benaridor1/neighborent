@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "../../lib/locale-context";
 import {
@@ -10,6 +10,7 @@ import {
   supportThreadPreview,
   SUPPORT_THREAD_ID,
 } from "../../lib/messages.mock";
+import { DynamicBackLink } from "../../components/layout/dynamic-back-link";
 
 function participantLabel(thread: { participantName: string; participantNameKey?: string }, translate: (key: string) => string) {
   return thread.participantNameKey ? translate(thread.participantNameKey) : thread.participantName;
@@ -53,13 +54,7 @@ export function MessagesPage() {
     <main className="min-h-[calc(100vh-70px)] bg-white" dir={isRtl ? "rtl" : "ltr"}>
       <div className="flex w-full flex-col gap-6 px-4 py-6 md:px-8 lg:px-10">
         <header className="w-full">
-          <Link
-            href="/"
-            className={`inline-flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900 ${isRtl ? "self-end" : "self-start"}`}
-          >
-            <ChevronLeft className={isRtl ? "h-4 w-4 rotate-180" : "h-4 w-4"} aria-hidden />
-            {t("backToHome")}
-          </Link>
+          <DynamicBackLink className={`inline-flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900 ${isRtl ? "self-end" : "self-start"}`} />
           <h1 className={`mt-4 text-3xl font-black tracking-tight text-zinc-900 sm:text-4xl ${isRtl ? "text-right" : "text-left"}`}>
             {t("menuMessages")}
           </h1>

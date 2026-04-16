@@ -5,7 +5,7 @@ export type MyProductStatusKey = "unavailability" | "pending" | "paymentDue" | "
 export type MyProductPrimaryAction = "confirmDelivery" | "pickAvailability" | "moreInfo" | "payNow";
 
 /** מוצרים שלי: אצלי / אצל לקוח */
-export type MyProductOwnerSub = "available" | "rentalRequestsPending" | "upcomingRental" | "leasedOut";
+export type MyProductOwnerSub = "available" | "rentalRequestsPending" | "upcomingRental" | "leasedOut" | "verificationStatus" | "allProducts";
 
 /** מוצרים שאני שוכר */
 export type MyProductRenterSub = "pendingApproval" | "awaitingPayment" | "current" | "past";
@@ -33,6 +33,8 @@ export interface MyProductListing {
   statusKey: MyProductStatusKey;
   publishedAt: string;
   rentalsCount: number;
+  /** Owner inventory size (how many units can be rented) */
+  unitsTotal?: number;
   primaryAction: MyProductPrimaryAction;
   /** Override default `/products/:id` link for renter rows */
   detailHref?: string;
@@ -56,7 +58,8 @@ export const myProductListings: MyProductListing[] = [
     statusKey: "unavailability",
     publishedAt: "19.8.2025",
     rentalsCount: 173,
-    primaryAction: "confirmDelivery",
+    unitsTotal: 5,
+    primaryAction: "pickAvailability",
   },
   {
     id: "t1",
@@ -67,6 +70,7 @@ export const myProductListings: MyProductListing[] = [
     statusKey: "unavailability",
     publishedAt: "2.7.2025",
     rentalsCount: 42,
+    unitsTotal: 2,
     primaryAction: "pickAvailability",
   },
   {
@@ -140,6 +144,14 @@ export const myProductListings: MyProductListing[] = [
     publishedAt: "11.3.2025",
     rentalsCount: 8,
     primaryAction: "moreInfo",
+    rentalRequest: {
+      renterName: "עומר גולן",
+      renterRating: 4.6,
+      dateFromLabel: "11.3.2025",
+      dateToLabel: "20.3.2025",
+      productLines: ["Canon EOS 750D ×1"],
+      kind: "private",
+    },
   },
   {
     id: "rent-pending-demo",

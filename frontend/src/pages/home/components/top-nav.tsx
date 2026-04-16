@@ -5,7 +5,7 @@ export function TopNav() {
   return (
     <header className="flex items-center justify-between py-4">
       <Link href="/" className="text-[34px] font-black leading-none tracking-tight text-zinc-900">
-        RENTO
+        neighborent
       </Link>
       <div className="flex items-center gap-2" dir="rtl">
         <button type="button" className="text-sm font-medium text-zinc-700">
