@@ -10,10 +10,22 @@ type Props = {
   kind: "private" | "company";
   productId?: string;
   companyId?: string;
+  rentalPeriodStartIso?: string;
+  pickupWhenLabel?: string;
+  pickupWhereLabel?: string;
   onSuccess: (record: DemoPostCheckoutRecord) => void;
 };
 
-export function DemoRentalPaymentForm({ listingId, kind, productId, companyId, onSuccess }: Props) {
+export function DemoRentalPaymentForm({
+  listingId,
+  kind,
+  productId,
+  companyId,
+  rentalPeriodStartIso,
+  pickupWhenLabel,
+  pickupWhereLabel,
+  onSuccess,
+}: Props) {
   const { language, t } = useLocale();
   const [cardName, setCardName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -40,7 +52,16 @@ export function DemoRentalPaymentForm({ listingId, kind, productId, companyId, o
       return;
     }
     setError(null);
-    const record = appendDemoPostCheckoutRecord({ listingId, kind, productId, companyId, language });
+    const record = appendDemoPostCheckoutRecord({
+      listingId,
+      kind,
+      productId,
+      companyId,
+      language,
+      rentalPeriodStartIso,
+      pickupWhenLabel,
+      pickupWhereLabel,
+    });
     onSuccess(record);
   }
 

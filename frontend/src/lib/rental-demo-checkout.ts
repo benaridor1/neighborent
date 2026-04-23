@@ -22,7 +22,34 @@ export type DemoPostCheckoutRecord = {
   lenderEmail: string;
   /** Path under /messages/:id */
   messagesThreadPath: string;
+  /** Start of rental period (ISO); used to show row under «שוכר בקרוב» before period begins */
+  rentalPeriodStartIso?: string;
+  pickupWhenLabel?: string;
+  pickupWhereLabel?: string;
 };
+
+export function parseDemoDateDdMmYyyy(label: string): Date | null {
+  const parts = label.trim().split(".");
+  if (parts.length !== 3) return null;
+  const d = Number(parts[0]);
+  const m = Number(parts[1]);
+  const y = Number(parts[2]);
+  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) return null;
+  if (d < 1 || d > 31 || m < 1 || m > 12) return null;
+  return new Date(y, m - 1, d);
+}
+
+export function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Rental day is strictly after today (local) — row belongs in «שוכר בקרוב». */
+export function isDemoPostCheckoutRentingSoon(rec: DemoPostCheckoutRecord): boolean {
+  if (!rec.rentalPeriodStartIso) return false;
+  const start = new Date(rec.rentalPeriodStartIso);
+  if (Number.isNaN(start.getTime())) return false;
+  return startOfLocalDay(new Date()) < startOfLocalDay(start);
+}
 
 function readAll(): DemoPostCheckoutRecord[] {
   if (typeof window === "undefined") return [];
@@ -81,6 +108,13 @@ export function listDemoPostCheckoutRecords(): DemoPostCheckoutRecord[] {
   return readAll();
 }
 
+export function removeDemoPostCheckoutRecord(recordId: string): void {
+  if (typeof window === "undefined") return;
+  const next = readAll().filter((r) => r.recordId !== recordId);
+  writeAll(next);
+  window.dispatchEvent(new Event("rentup:demo-post-checkout-changed"));
+}
+
 export function isDemoListingPaid(listingId: string): boolean {
   return readAll().some((r) => r.listingId === listingId);
 }
@@ -92,12 +126,15 @@ export function appendDemoPostCheckoutRecord(
     productId?: string;
     companyId?: string;
     language: string;
+    rentalPeriodStartIso?: string;
+    pickupWhenLabel?: string;
+    pickupWhereLabel?: string;
   },
 ): DemoPostCheckoutRecord {
   if (typeof window === "undefined") {
     throw new Error("appendDemoPostCheckoutRecord is client-only");
   }
-  const { listingId, kind, productId, companyId, language } = params;
+  const { listingId, kind, productId, companyId, language, rentalPeriodStartIso, pickupWhenLabel, pickupWhereLabel } = params;
   let productTitle = "";
   let imageUrl = "";
   let pricePerDay = 0;
@@ -139,6 +176,9 @@ export function appendDemoPostCheckoutRecord(
     pricePerDay,
     paidAt: new Date().toISOString(),
     ...lender,
+    rentalPeriodStartIso,
+    pickupWhenLabel,
+    pickupWhereLabel,
   };
   writeAll([record, ...readAll()]);
   window.dispatchEvent(new Event("rentup:demo-post-checkout-changed"));

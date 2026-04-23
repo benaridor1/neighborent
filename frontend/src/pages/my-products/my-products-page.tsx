@@ -5,7 +5,6 @@ import Link from "next/link";
 import { CalendarDays, Clock3, MessageCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DemoRentalPaymentForm } from "../../components/demo-rental-payment-form";
 import { useLocale } from "../../lib/locale-context";
 import {
   myProductListings,
@@ -19,7 +18,24 @@ import {
   readApprovedOwnerRentalRequestIds,
   readDeclinedOwnerRentalRequestIds,
 } from "../../lib/owner-rental-request-state";
-import { isDemoListingPaid, listDemoPostCheckoutRecords, type DemoPostCheckoutRecord } from "../../lib/rental-demo-checkout";
+import {
+  isDemoListingPaid,
+  isDemoPostCheckoutRentingSoon,
+  listDemoPostCheckoutRecords,
+  removeDemoPostCheckoutRecord,
+  type DemoPostCheckoutRecord,
+} from "../../lib/rental-demo-checkout";
+import {
+  isRenterReceiptConfirmed,
+  RENTER_RECEIPT_CHANGED_EVENT,
+} from "../../lib/renter-receipt-confirmation";
+import {
+  cancelMockRentingSoonListing,
+  readCancelledMockRentingSoonListingIds,
+  RENTER_RENTAL_CANCELLED_EVENT,
+} from "../../lib/renter-rental-cancelled";
+import { ReceiptConditionDialog } from "../../components/rentals/receipt-condition-dialog";
+import { DefectCancelDialog } from "../../components/rentals/defect-cancel-dialog";
 import { listPendingAvailabilityRequests, mapAvailabilityRecordToListing } from "../../lib/renter-availability-requests";
 import {
   listUploadedOwnerListings,
@@ -31,7 +47,7 @@ type MainMode = "owner" | "renter";
 type AllProductsLifecycleFilter = "all" | "available" | "rented";
 type AllProductsVerificationFilter = "all" | "approved" | "rejected" | "pending";
 
-const RENTER_SUB_URL_VALUES: MyProductRenterSub[] = ["pendingApproval", "awaitingPayment", "current", "past"];
+const RENTER_SUB_URL_VALUES: MyProductRenterSub[] = ["pendingApproval", "awaitingPayment", "rentingSoon", "current", "past"];
 const OWNER_SUB_URL_VALUES: MyProductOwnerSub[] = ["available", "rentalRequestsPending", "upcomingRental", "leasedOut", "verificationStatus", "allProducts"];
 const OWNER_UNAVAILABILITY_KEY = "rentup:owner-unavailability-v1";
 
@@ -127,8 +143,11 @@ export function MyProductsPage() {
   const [pendingBump, setPendingBump] = useState(0);
   const [ownerRequestBump, setOwnerRequestBump] = useState(0);
   const [checkoutBump, setCheckoutBump] = useState(0);
+  const [receiptBump, setReceiptBump] = useState(0);
+  const [cancelledBump, setCancelledBump] = useState(0);
+  const [receiptModal, setReceiptModal] = useState<{ key: string; title: string } | null>(null);
+  const [defectModal, setDefectModal] = useState<{ key: string; title: string; source: "checkout" | "mock" } | null>(null);
   const [uploadedOwnerBump, setUploadedOwnerBump] = useState(0);
-  const [expandedPayListingId, setExpandedPayListingId] = useState<string | null>(null);
   const [unavailabilityBump, setUnavailabilityBump] = useState(0);
   const [openUnavailabilityFor, setOpenUnavailabilityFor] = useState<string | null>(null);
   const [openCalendarFor, setOpenCalendarFor] = useState<string | null>(null);
@@ -149,29 +168,35 @@ export function MyProductsPage() {
   const [allProductsVerificationFilter, setAllProductsVerificationFilter] = useState<AllProductsVerificationFilter>("all");
 
   useEffect(() => {
-    const hasOpenModal = Boolean(openUnavailabilityFor || openCalendarFor);
+    const hasOpenModal = Boolean(openUnavailabilityFor || openCalendarFor || receiptModal || defectModal);
     if (!hasOpenModal) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [openUnavailabilityFor, openCalendarFor]);
+  }, [openUnavailabilityFor, openCalendarFor, receiptModal, defectModal]);
 
   useEffect(() => {
     const onPendingChanged = () => setPendingBump((n) => n + 1);
     const onOwnerReq = () => setOwnerRequestBump((n) => n + 1);
     const onCheckout = () => setCheckoutBump((n) => n + 1);
+    const onReceipt = () => setReceiptBump((n) => n + 1);
+    const onRentalCancelled = () => setCancelledBump((n) => n + 1);
     const onUploadedOwner = () => setUploadedOwnerBump((n) => n + 1);
     window.addEventListener("rentup:renter-availability-requests-changed", onPendingChanged);
     window.addEventListener("rentup:owner-rental-requests-changed", onOwnerReq);
     window.addEventListener("rentup:demo-post-checkout-changed", onCheckout);
+    window.addEventListener(RENTER_RECEIPT_CHANGED_EVENT, onReceipt);
+    window.addEventListener(RENTER_RENTAL_CANCELLED_EVENT, onRentalCancelled);
     window.addEventListener(ownerUploadedListingsChangedEventName(), onUploadedOwner);
     window.addEventListener("storage", onPendingChanged);
     return () => {
       window.removeEventListener("rentup:renter-availability-requests-changed", onPendingChanged);
       window.removeEventListener("rentup:owner-rental-requests-changed", onOwnerReq);
       window.removeEventListener("rentup:demo-post-checkout-changed", onCheckout);
+      window.removeEventListener(RENTER_RECEIPT_CHANGED_EVENT, onReceipt);
+      window.removeEventListener(RENTER_RENTAL_CANCELLED_EVENT, onRentalCancelled);
       window.removeEventListener(ownerUploadedListingsChangedEventName(), onUploadedOwner);
       window.removeEventListener("storage", onPendingChanged);
     };
@@ -207,6 +232,16 @@ export function MyProductsPage() {
     void checkoutBump;
     return listDemoPostCheckoutRecords();
   }, [checkoutBump]);
+
+  const postCheckoutRentingSoonRecords = useMemo(() => {
+    void checkoutBump;
+    return postCheckoutRecords.filter(isDemoPostCheckoutRentingSoon);
+  }, [checkoutBump, postCheckoutRecords]);
+
+  const postCheckoutCurrentRecords = useMemo(() => {
+    void checkoutBump;
+    return postCheckoutRecords.filter((r) => !isDemoPostCheckoutRentingSoon(r));
+  }, [checkoutBump, postCheckoutRecords]);
 
   const uploadedOwnerListings = useMemo<MyProductListing[]>(() => {
     void uploadedOwnerBump;
@@ -263,6 +298,8 @@ export function MyProductsPage() {
     const base = myProductListings.filter((item) => {
       if (item.renterSub !== renterSub) return false;
       if (renterSub === "awaitingPayment" && isDemoListingPaid(listingCheckoutId(item))) return false;
+      void cancelledBump;
+      if (renterSub === "rentingSoon" && readCancelledMockRentingSoonListingIds().has(item.id)) return false;
       return true;
     });
     if (renterSub === "pendingApproval") {
@@ -281,6 +318,7 @@ export function MyProductsPage() {
     listingVerificationMeta,
     allProductsLifecycleFilter,
     allProductsVerificationFilter,
+    cancelledBump,
   ]);
 
   const selectMainMode = useCallback(
@@ -415,14 +453,12 @@ export function MyProductsPage() {
   }
 
   function buildManualUnavailableRanges(unavailableRanges: UnavailabilityRange[]): CalendarRange[] {
-    return unavailableRanges
-      .map((range) => {
-        const from = parseIsoDate(range.from);
-        const to = parseIsoDate(range.to);
-        if (!from || !to) return null;
-        return { from, to, units: 0, kind: "manualUnavailable" as const };
-      })
-      .filter((range): range is CalendarRange => Boolean(range));
+    return unavailableRanges.flatMap((range): CalendarRange[] => {
+      const from = parseIsoDate(range.from);
+      const to = parseIsoDate(range.to);
+      if (!from || !to) return [];
+      return [{ from, to, units: 0, kind: "manualUnavailable" as const }];
+    });
   }
 
   function sameDay(a: Date, b: Date) {
@@ -635,11 +671,16 @@ export function MyProductsPage() {
     return d.toLocaleDateString(language === "he" || language === "ar" ? "he-IL" : "en-GB");
   }
 
-  function renderPostCheckoutCard(rec: DemoPostCheckoutRecord) {
+  function renderPostCheckoutCard(rec: DemoPostCheckoutRecord, variant: "active" | "soon" = "active") {
+    void receiptBump;
+    const isSoon = variant === "soon";
+    const receiptDone = isRenterReceiptConfirmed(rec.recordId);
+    const borderSoon = isSoon ? "border-sky-200 bg-sky-50/50" : "border-emerald-200 bg-emerald-50/40";
+    const badgeClass = isSoon ? "text-sky-950" : "text-emerald-900";
     return (
       <article
         key={rec.recordId}
-        className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/40 shadow-sm"
+        className={`overflow-hidden rounded-2xl border shadow-sm ${borderSoon}`}
       >
         <div className="flex flex-col gap-5 p-4 sm:p-5 md:flex-row md:items-stretch md:gap-6">
           <div className="relative mx-auto h-44 w-full max-w-[280px] shrink-0 overflow-hidden rounded-xl bg-white md:mx-0 md:h-40 md:w-52">
@@ -647,7 +688,9 @@ export function MyProductsPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-3">
             <div className={`flex flex-col gap-2 ${isRtl ? "text-right" : "text-left"}`}>
-              <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">{t("myProductsPostCheckoutBadge")}</p>
+              <p className={`text-xs font-bold uppercase tracking-wide ${badgeClass}`}>
+                {isSoon ? t("myProductsPostCheckoutBadgeRentingSoon") : t("myProductsPostCheckoutBadge")}
+              </p>
               <h2 className="text-lg font-bold text-zinc-900 sm:text-xl">{rec.productTitle}</h2>
               <p className="text-sm text-zinc-600">
                 {t("myProductsPostCheckoutPaidAt")}: {formatPaidAt(rec.paidAt)}
@@ -658,6 +701,21 @@ export function MyProductsPage() {
                 </p>
               ) : null}
             </div>
+            {isSoon && (rec.pickupWhenLabel || rec.pickupWhereLabel) ? (
+              <div className={`rounded-xl border border-sky-100 bg-white p-4 ${isRtl ? "text-right" : "text-left"}`}>
+                <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{t("myProductsRentingSoonPickupBlockTitle")}</p>
+                {rec.pickupWhenLabel ? (
+                  <p className="mt-2 text-sm text-zinc-800">
+                    <span className="font-semibold text-zinc-900">{t("myProductsRentingSoonPickupWhen")}:</span> {rec.pickupWhenLabel}
+                  </p>
+                ) : null}
+                {rec.pickupWhereLabel ? (
+                  <p className="mt-1 text-sm text-zinc-800">
+                    <span className="font-semibold text-zinc-900">{t("myProductsRentingSoonPickupWhere")}:</span> {rec.pickupWhereLabel}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className={`rounded-xl border border-emerald-100 bg-white p-4 ${isRtl ? "text-right" : "text-left"}`}>
               <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{t("myProductsLenderDetailsTitle")}</p>
               <p className="mt-2 text-sm font-semibold text-zinc-900">{rec.lenderDisplayName}</p>
@@ -671,6 +729,31 @@ export function MyProductsPage() {
               <MessageCircle className="h-4 w-4 shrink-0" aria-hidden />
               {t("myProductsOpenChatWithLender")}
             </Link>
+            {isSoon ? (
+              <div className={`space-y-3 ${isRtl ? "text-right" : "text-left"}`}>
+                <p className="text-xs text-zinc-600">{t("myProductsReceiptMutualNote")}</p>
+                {receiptDone ? (
+                  <p className="text-sm font-semibold text-emerald-800">{t("myProductsReceiptConfirmedDemo")}</p>
+                ) : (
+                  <div className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap ${isRtl ? "sm:flex-row-reverse" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => setReceiptModal({ key: rec.recordId, title: rec.productTitle })}
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-emerald-300 bg-white px-5 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-50 sm:min-w-[160px]"
+                    >
+                      {t("myProductsReceiptConfirm")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDefectModal({ key: rec.recordId, title: rec.productTitle, source: "checkout" })}
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-semibold text-red-900 shadow-sm hover:bg-red-100 sm:min-w-[160px]"
+                    >
+                      {t("defectReportButton")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
       </article>
@@ -680,7 +763,8 @@ export function MyProductsPage() {
   const tabButton =
     "min-h-[44px] flex-1 rounded-xl px-3 text-sm font-semibold transition sm:min-w-0 sm:flex-none sm:px-5";
 
-  const showPostCheckout = mainMode === "renter" && renterSub === "current" && postCheckoutRecords.length > 0;
+  const showPostCheckout = mainMode === "renter" && renterSub === "current" && postCheckoutCurrentRecords.length > 0;
+  const showPostCheckoutSoon = mainMode === "renter" && renterSub === "rentingSoon" && postCheckoutRentingSoonRecords.length > 0;
 
   return (
     <main className="min-h-[calc(100vh-70px)] bg-zinc-50/80" dir={isRtl ? "rtl" : "ltr"}>
@@ -813,6 +897,15 @@ export function MyProductsPage() {
             <button
               type="button"
               role="tab"
+              aria-selected={renterSub === "rentingSoon"}
+              onClick={() => selectRenterSub("rentingSoon")}
+              className={`${tabButton} ${renterSub === "rentingSoon" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              {t("myProductsRenterRentingSoon")}
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={renterSub === "current"}
               onClick={() => selectRenterSub("current")}
               className={`${tabButton} ${renterSub === "current" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
@@ -869,14 +962,22 @@ export function MyProductsPage() {
         ) : null}
 
         <div className="space-y-4">
+          {showPostCheckoutSoon ? (
+            <div className="space-y-3">
+              <h2 className={`text-sm font-bold text-zinc-800 ${isRtl ? "text-right" : "text-left"}`}>
+                {t("myProductsPostCheckoutSectionTitleRentingSoon")}
+              </h2>
+              {postCheckoutRentingSoonRecords.map((rec) => renderPostCheckoutCard(rec, "soon"))}
+            </div>
+          ) : null}
           {showPostCheckout ? (
             <div className="space-y-3">
               <h2 className={`text-sm font-bold text-zinc-800 ${isRtl ? "text-right" : "text-left"}`}>{t("myProductsPostCheckoutSectionTitle")}</h2>
-              {postCheckoutRecords.map(renderPostCheckoutCard)}
+              {postCheckoutCurrentRecords.map((rec) => renderPostCheckoutCard(rec))}
             </div>
           ) : null}
 
-          {filtered.length === 0 && !(showPostCheckout && renterSub === "current") ? (
+          {filtered.length === 0 && !showPostCheckout && !showPostCheckoutSoon ? (
             <p className="rounded-2xl border border-zinc-200 bg-white px-5 py-10 text-center text-sm text-zinc-600">{t("myProductsEmpty")}</p>
           ) : filtered.length === 0 ? null : (
             filtered.map((item) => {
@@ -895,11 +996,6 @@ export function MyProductsPage() {
               const unitsTotal = Math.max(1, effectiveUnitsRaw ?? 1);
               const unavailableRanges = unavailabilityByListing[item.id] ?? [];
               const detailHref = item.detailHref ?? `/products/${item.id}`;
-              const lid = listingCheckoutId(item);
-              const isPrivateAwaiting = !owner && item.renterSub === "awaitingPayment" && item.checkoutHref?.includes("type=private");
-              const isCompanyAwaiting = !owner && item.renterSub === "awaitingPayment" && item.checkoutHref?.includes("type=company");
-              const productIdFromCheckout = item.checkoutHref?.match(/productId=([^&]+)/)?.[1];
-              const companyIdFromCheckout = item.checkoutHref?.match(/companyId=([^&]+)/)?.[1];
               const allProductsStatus: "rented" | "available" | "pendingVerification" | "rejected" =
                 verificationStatus === "rejected"
                   ? "rejected"
@@ -1027,6 +1123,10 @@ export function MyProductsPage() {
                         ) : ownerAvailable ? (
                           <span className="inline-flex w-fit shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200/80">
                             {productCalendarAvailabilityLabel()}
+                          </span>
+                        ) : !owner && item.renterSub === "rentingSoon" ? (
+                          <span className="inline-flex w-fit shrink-0 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-950 ring-1 ring-sky-200/80">
+                            {t("myProductsRenterRentingSoon")}
                           </span>
                         ) : (
                           <span
@@ -1205,43 +1305,106 @@ export function MyProductsPage() {
                         </p>
                       ) : null}
 
-                      {!owner && item.renterSub === "awaitingPayment" ? (
-                        <div className="rounded-xl border border-zinc-200 bg-zinc-50/90 p-4">
-                          <button
-                            type="button"
-                            onClick={() => setExpandedPayListingId((cur) => (cur === lid ? null : lid))}
-                            className="text-sm font-semibold text-emerald-900 underline-offset-2 hover:underline"
+                      {!owner && item.renterSub === "awaitingPayment" && item.rentalPaymentSummary ? (
+                        <div className={`rounded-xl border border-zinc-200 bg-zinc-50/90 p-4 ${isRtl ? "text-right" : "text-left"}`}>
+                          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{t("myProductsPaymentRentalDates")}</p>
+                          <p className="mt-2 text-sm text-zinc-800">
+                            <span className="font-semibold">{t("dateStartShort")}:</span> {item.rentalPaymentSummary.dateFromLabel}{" "}
+                            <span className="mx-1 text-zinc-400">·</span>
+                            <span className="font-semibold">{t("dateEndShort")}:</span> {item.rentalPaymentSummary.dateToLabel}
+                          </p>
+                          <div className="mt-4 border-t border-zinc-200 pt-3">
+                            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{t("myProductsPaymentDetails")}</p>
+                            <ul className="mt-2 space-y-1.5 text-sm text-zinc-700">
+                              <li className="flex justify-between gap-4">
+                                <span>
+                                  {formatCurrency(item.pricePerDay)} × {item.rentalPaymentSummary.billableDays} {t("myProductsPaymentDays")}
+                                </span>
+                                <span className="shrink-0 font-medium tabular-nums">
+                                  {formatCurrency(item.pricePerDay * item.rentalPaymentSummary.billableDays)}
+                                </span>
+                              </li>
+                              <li className="flex justify-between gap-4 border-t border-zinc-200 pt-2 text-base font-bold text-zinc-900">
+                                <span>{t("myProductsPaymentTotalDue")}</span>
+                                <span className="shrink-0 tabular-nums">
+                                  {formatCurrency(item.pricePerDay * item.rentalPaymentSummary.billableDays)}
+                                </span>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {!owner && item.renterSub === "rentingSoon" && item.renterPickupDetails ? (
+                        <div className="space-y-3">
+                          <div className={`rounded-xl border border-sky-100 bg-sky-50/40 p-4 ${isRtl ? "text-right" : "text-left"}`}>
+                            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{t("myProductsRentingSoonPickupBlockTitle")}</p>
+                            <p className="mt-2 text-sm text-zinc-800">
+                              <span className="font-semibold text-zinc-900">{t("myProductsRentingSoonPickupWhen")}:</span>{" "}
+                              {item.renterPickupDetails.pickupWhenLabel}
+                            </p>
+                            <p className="mt-1 text-sm text-zinc-800">
+                              <span className="font-semibold text-zinc-900">{t("myProductsRentingSoonPickupWhere")}:</span>{" "}
+                              {item.renterPickupDetails.pickupWhereLabel}
+                            </p>
+                          </div>
+                          <div className={`rounded-xl border border-emerald-100 bg-white p-4 ${isRtl ? "text-right" : "text-left"}`}>
+                            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{t("myProductsLenderDetailsTitle")}</p>
+                            <p className="mt-2 text-sm font-semibold text-zinc-900">{item.renterPickupDetails.lenderDisplayName}</p>
+                            <p className="mt-1 text-sm text-zinc-700">{item.renterPickupDetails.lenderPhone}</p>
+                            <p className="mt-1 text-sm text-zinc-600">{item.renterPickupDetails.lenderEmail}</p>
+                          </div>
+                          <Link
+                            href={`/messages/${item.renterPickupDetails.messagesThreadPath}?from=renting-soon`}
+                            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-emerald-950 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-900"
                           >
-                            {expandedPayListingId === lid ? t("myProductsHideInlinePay") : t("myProductsShowInlinePay")}
-                          </button>
-                          {expandedPayListingId === lid ? (
-                            <div className="mt-4 space-y-3">
-                              <DemoRentalPaymentForm
-                                listingId={lid}
-                                kind={isCompanyAwaiting ? "company" : "private"}
-                                productId={isPrivateAwaiting ? productIdFromCheckout : undefined}
-                                companyId={isCompanyAwaiting ? companyIdFromCheckout : undefined}
-                                onSuccess={() => {
-                                  setCheckoutBump((n) => n + 1);
-                                  setExpandedPayListingId(null);
-                                  selectRenterSub("current");
-                                }}
-                              />
-                            </div>
-                          ) : null}
+                            <MessageCircle className="h-4 w-4 shrink-0" aria-hidden />
+                            {t("myProductsOpenChatWithLender")}
+                          </Link>
+                          <div className={`space-y-2 ${isRtl ? "text-right" : "text-left"}`}>
+                            <p className="text-xs text-zinc-600">{t("myProductsReceiptMutualNote")}</p>
+                            {isRenterReceiptConfirmed(item.id) ? (
+                              <p className="text-sm font-semibold text-emerald-800">{t("myProductsReceiptConfirmedDemo")}</p>
+                            ) : (
+                              <div className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap ${isRtl ? "sm:flex-row-reverse" : ""}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptModal({ key: item.id, title: item.name })}
+                                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-emerald-300 bg-white px-5 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-50 sm:min-w-[160px]"
+                                >
+                                  {t("myProductsReceiptConfirm")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDefectModal({ key: item.id, title: item.name, source: "mock" })}
+                                  className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-semibold text-red-900 shadow-sm hover:bg-red-100 sm:min-w-[160px]"
+                                >
+                                  {t("defectReportButton")}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ) : null}
 
                       {owner && item.ownerSub === "rentalRequestsPending" && !isAllProductsTab ? null : (
-                      <div className="flex items-center justify-between gap-3 border-t border-zinc-100 pt-3">
+                      <div
+                        className={`flex items-center justify-between gap-3 border-t border-zinc-100 pt-3${
+                          !owner && (item.renterSub === "awaitingPayment" || item.renterSub === "rentingSoon") && !isRtl
+                            ? " flex-row-reverse"
+                            : ""
+                        }`}
+                      >
                         {!owner ? (
-                          <button
-                            type="button"
+                          <Link
+                            href={detailHref}
                             className="text-sm font-semibold text-emerald-900 underline-offset-2 hover:underline"
                           >
                             {t("myProductsViewRental")}
-                          </button>
-                        ) : <span />}
+                          </Link>
+                        ) : (
+                          <span />
+                        )}
                         <div
                           className={`flex items-center gap-2 ${isRtl ? "flex-row-reverse" : ""}`}
                         >
@@ -1283,7 +1446,7 @@ export function MyProductsPage() {
                               </button>
                             </>
                           ) : null}
-                          {!owner && item.primaryAction === "payNow" && item.checkoutHref ? (
+                          {!owner && item.renterSub === "rentingSoon" ? null : !owner && item.primaryAction === "payNow" && item.checkoutHref ? (
                             <Link
                               href={item.checkoutHref}
                               className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-950 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-900 sm:min-w-[200px]"
@@ -1553,6 +1716,25 @@ export function MyProductsPage() {
         })()
       ) : null}
 
+      <ReceiptConditionDialog
+        isOpen={Boolean(receiptModal)}
+        onClose={() => setReceiptModal(null)}
+        confirmKey={receiptModal?.key ?? ""}
+        productTitle={receiptModal?.title ?? ""}
+      />
+      <DefectCancelDialog
+        isOpen={Boolean(defectModal)}
+        onClose={() => setDefectModal(null)}
+        productTitle={defectModal?.title ?? ""}
+        onConfirmCancel={() => {
+          if (!defectModal) return;
+          if (defectModal.source === "checkout") {
+            removeDemoPostCheckoutRecord(defectModal.key);
+          } else {
+            cancelMockRentingSoonListing(defectModal.key);
+          }
+        }}
+      />
     </main>
   );
 }

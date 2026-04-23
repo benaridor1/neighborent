@@ -20,7 +20,8 @@ export function SiteShell({ children }: SiteShellProps) {
   const query = searchParams?.toString() ?? "";
 
   useEffect(() => {
-    const nextPath = query ? `${pathname}?${query}` : pathname;
+    const path = pathname ?? "";
+    const nextPath = query ? `${path}?${query}` : path;
     rememberNavigation(nextPath);
   }, [pathname, query]);
 

@@ -8,7 +8,18 @@ export type MyProductPrimaryAction = "confirmDelivery" | "pickAvailability" | "m
 export type MyProductOwnerSub = "available" | "rentalRequestsPending" | "upcomingRental" | "leasedOut" | "verificationStatus" | "allProducts";
 
 /** מוצרים שאני שוכר */
-export type MyProductRenterSub = "pendingApproval" | "awaitingPayment" | "current" | "past";
+export type MyProductRenterSub = "pendingApproval" | "awaitingPayment" | "rentingSoon" | "current" | "past";
+
+/** לפני תחילת תקופת ההשכרה: איסוף + פרטי משכיר (דמו) */
+export type RenterPickupDetails = {
+  pickupWhenLabel: string;
+  pickupWhereLabel: string;
+  lenderDisplayName: string;
+  lenderPhone: string;
+  lenderEmail: string;
+  /** Path under /messages/:id */
+  messagesThreadPath: string;
+};
 
 export type RentalRequestKind = "private" | "companyCart";
 
@@ -30,6 +41,8 @@ export interface MyProductListing {
   ownerSub?: MyProductOwnerSub;
   /** מוצרים שאני שוכר */
   renterSub?: MyProductRenterSub;
+  /** שוכר בקרוב: פרטי איסוף ומשכיר */
+  renterPickupDetails?: RenterPickupDetails;
   statusKey: MyProductStatusKey;
   publishedAt: string;
   rentalsCount: number;
@@ -46,6 +59,12 @@ export interface MyProductListing {
   summaryLine?: string;
   /** Owner: בקשת השכרה לאישור — פרטי שוכר ותאריכים */
   rentalRequest?: RentalRequestInfo;
+  /** Renter: מוכנים לתשלום — תקופה וחישוב לפני כניסה לדף תשלום */
+  rentalPaymentSummary?: {
+    dateFromLabel: string;
+    dateToLabel: string;
+    billableDays: number;
+  };
 }
 
 export const myProductListings: MyProductListing[] = [
@@ -178,6 +197,11 @@ export const myProductListings: MyProductListing[] = [
     primaryAction: "payNow",
     detailHref: "/products/p3",
     checkoutHref: "/checkout?type=private&productId=p3&demo=1&listingId=rent-pay-private-demo",
+    rentalPaymentSummary: {
+      dateFromLabel: "25.4.2026",
+      dateToLabel: "29.4.2026",
+      billableDays: 5,
+    },
   },
   {
     id: "rent-pay-company-demo",
@@ -193,6 +217,31 @@ export const myProductListings: MyProductListing[] = [
     detailHref: "/rental-companies/rc1",
     checkoutHref: "/checkout?type=company&companyId=rc1&demo=1&listingId=rent-pay-company-demo",
     summaryLine: "DJI Mini 3 Pro ×1 · MacBook Pro M3 ×1",
+    rentalPaymentSummary: {
+      dateFromLabel: "28.4.2026",
+      dateToLabel: "2.5.2026",
+      billableDays: 5,
+    },
+  },
+  {
+    id: "rent-soon-demo-a7",
+    name: "Sony A7 III",
+    imageUrl: demoProductCardImage("photo", "p3"),
+    pricePerDay: 180,
+    renterSub: "rentingSoon",
+    statusKey: "live",
+    publishedAt: "10.4.2026",
+    rentalsCount: 0,
+    primaryAction: "moreInfo",
+    detailHref: "/products/p3",
+    renterPickupDetails: {
+      pickupWhenLabel: "יום ראשון 20.4.2026, 18:00",
+      pickupWhereLabel: "רח׳ הרצל 12, תל אביב",
+      lenderDisplayName: "Tomer Tenenbaum",
+      lenderPhone: "+972-52-555-0142",
+      lenderEmail: "tomer.demo@rentup.local",
+      messagesThreadPath: "t1",
+    },
   },
   {
     id: "p3",

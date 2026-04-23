@@ -187,7 +187,7 @@ export function SiteHeader() {
                       openLocaleModal();
                     }}
                   />
-                  <MenuItem href="#" icon={<FileText size={18} />} label={t("menuTerms")} onNavigate={() => setIsMenuOpen(false)} />
+                  <MenuItem href="/terms" icon={<FileText size={18} />} label={t("menuTerms")} onNavigate={() => setIsMenuOpen(false)} />
                   <MenuItem href="#" icon={<FileText size={18} />} label={t("menuPrivacy")} onNavigate={() => setIsMenuOpen(false)} />
                 </nav>
               </>
