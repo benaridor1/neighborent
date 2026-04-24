@@ -203,29 +203,29 @@ export function HomeSearch({ onSearch }: HomeSearchProps) {
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-3" dir={isRtl ? "rtl" : "ltr"}>
-      <div className="rounded-full border border-zinc-200 bg-white p-1.5 shadow-sm">
+      <div className="rounded-3xl border border-zinc-200 bg-white p-2 shadow-sm md:rounded-full md:p-1.5">
         <div className="grid grid-cols-1 items-center gap-1 md:grid-cols-[1fr_1fr_1fr_auto]">
-          <button type="button" onClick={() => togglePanel("location")} className="rounded-full px-5 py-2 text-start hover:bg-zinc-50">
+          <button type="button" onClick={() => togglePanel("location")} className="rounded-2xl px-4 py-3 text-start hover:bg-zinc-50 md:rounded-full md:px-5 md:py-2">
             <p className="text-xs font-bold text-zinc-900">{t("where")}</p>
             <p className="text-xs text-zinc-500">{selectedCity}</p>
           </button>
-          <button type="button" onClick={() => togglePanel("dates")} className="rounded-full px-5 py-2 text-start hover:bg-zinc-50">
+          <button type="button" onClick={() => togglePanel("dates")} className="rounded-2xl px-4 py-3 text-start hover:bg-zinc-50 md:rounded-full md:px-5 md:py-2">
             <p className="text-xs font-bold text-zinc-900">{t("when")}</p>
             <p className="text-xs text-zinc-500">{selectedDates}</p>
           </button>
-          <button type="button" onClick={() => togglePanel("query")} className="rounded-full px-5 py-2 text-start hover:bg-zinc-50">
+          <button type="button" onClick={() => togglePanel("query")} className="rounded-2xl px-4 py-3 text-start hover:bg-zinc-50 md:rounded-full md:px-5 md:py-2">
             <p className="text-xs font-bold text-zinc-900">{t("whatLookingFor")}</p>
             <p className="text-xs text-zinc-500">{searchText || t("productOrModelPlaceholder")}</p>
           </button>
-          <div className="flex items-center justify-center gap-2 px-1.5">
-            <button type="button" onClick={submitSearch} className="rounded-full bg-emerald-950 p-3 text-white">
+          <div className="flex items-center justify-end gap-2 px-1.5 pt-1 md:justify-center md:pt-0">
+            <button type="button" onClick={submitSearch} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-950 text-white">
               <Search size={15} />
             </button>
             {hasSearched && (
               <button
                 type="button"
                 onClick={() => togglePanel("filters")}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-800"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-800"
               >
                 <SlidersHorizontal size={13} />
                 {t("filters")}

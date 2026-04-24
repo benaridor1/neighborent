@@ -17,7 +17,7 @@ export function RentalCompanyCard({ company, layout = "carousel" }: RentalCompan
   return (
     <article
       className={`overflow-hidden rounded-xl border border-zinc-100 bg-white transition hover:border-zinc-300 hover:shadow-sm ${
-        layout === "grid" ? "mx-auto w-full max-w-[300px]" : "w-[188px] shrink-0"
+        layout === "grid" ? "w-full max-w-none sm:mx-auto sm:max-w-[300px]" : "w-[170px] shrink-0 sm:w-[188px]"
       }`}
     >
       <Link href={`/rental-companies/${company.id}`} className="block">

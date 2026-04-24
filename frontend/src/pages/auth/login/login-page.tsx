@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { markUserAuthenticated } from "../../../lib/auth-session";
+import { markUserAuthenticated, saveUserProfile } from "../../../lib/auth-session";
 import { useLocale } from "../../../lib/locale-context";
 
 export function LoginPage() {
@@ -13,8 +13,52 @@ export function LoginPage() {
 
   const onSubmitLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    saveUserProfile({
+      userId: `usr-${Date.now()}`,
+      role: "user",
+      verificationStatus: "pending",
+      accountType: "private",
+      firstName: "משתמש",
+      lastName: "חדש",
+      phone: "+972500000000",
+      email: "pending-user@neighborent.com",
+    });
     markUserAuthenticated();
     router.push("/");
+  };
+
+  const onTemporaryCompanyLogin = () => {
+    saveUserProfile({
+      userId: "company-demo-user",
+      role: "user",
+      verificationStatus: "approved",
+      accountType: "rental_company",
+      firstName: "Rent",
+      lastName: "Admin",
+      phone: "+972501234567",
+      email: "company-demo@neighborent.com",
+      companyBrandName: "Neighborent Pro Rentals",
+      companyAddress: "דרך השלום 25, תל אביב",
+      companyContactName: "מנהל תפעול",
+      companyBusinessType: "events",
+    });
+    markUserAuthenticated();
+    router.push("/");
+  };
+
+  const onAdminDemoLogin = () => {
+    saveUserProfile({
+      userId: "admin-demo-user",
+      role: "admin",
+      verificationStatus: "approved",
+      accountType: "private",
+      firstName: "Admin",
+      lastName: "Manager",
+      phone: "+972500001111",
+      email: "admin@neighborent.com",
+    });
+    markUserAuthenticated();
+    router.push("/admin");
   };
 
   return (
@@ -44,6 +88,20 @@ export function LoginPage() {
             </label>
             <button type="submit" className="h-11 w-full rounded-xl bg-emerald-950 text-sm font-semibold text-white">
               {t("authLoginAction")}
+            </button>
+            <button
+              type="button"
+              onClick={onTemporaryCompanyLogin}
+              className="h-11 w-full rounded-xl border border-emerald-300 bg-emerald-50 text-sm font-semibold text-emerald-950 hover:bg-emerald-100"
+            >
+              כניסה זמנית כחברת השכרה (דמו)
+            </button>
+            <button
+              type="button"
+              onClick={onAdminDemoLogin}
+              className="h-11 w-full rounded-xl border border-violet-300 bg-violet-50 text-sm font-semibold text-violet-900 hover:bg-violet-100"
+            >
+              כניסה לפאנל ניהול (דמו)
             </button>
           </form>
 

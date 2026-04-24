@@ -21,7 +21,7 @@ export function HomeCard({ product, layout = "carousel" }: HomeCardProps) {
   return (
     <article
       className={`relative overflow-hidden rounded-xl border border-zinc-100 bg-white ${
-        layout === "grid" ? "mx-auto w-full max-w-[315px]" : "w-[188px] shrink-0"
+        layout === "grid" ? "w-full max-w-none sm:mx-auto sm:max-w-[315px]" : "w-[170px] shrink-0 sm:w-[188px]"
       }`}
     >
       <Link href={`/products/${product.id}`} className="block">

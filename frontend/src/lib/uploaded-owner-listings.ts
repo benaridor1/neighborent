@@ -1,6 +1,7 @@
 "use client";
 
 import { demoProductCardImage, type DemoCategoryKey } from "./demo-category-images";
+import type { ListingConditionId } from "./catalog-search-constants";
 
 const OWNER_LISTINGS_KEY = "rentup:owner-uploaded-listings-v1";
 const OWNER_LISTINGS_CHANGED_EVENT = "rentup:owner-uploaded-listings-changed";
@@ -13,6 +14,15 @@ export interface UploadedOwnerListingRecord {
   publishedAt: string;
   rentalsCount: number;
   unitsTotal: number;
+  category: DemoCategoryKey;
+  city?: string;
+  condition?: ListingConditionId;
+  deposit?: number;
+  description?: string;
+  imageFrontUrl?: string;
+  imageBackUrl?: string;
+  imageRightUrl?: string;
+  imageLeftUrl?: string;
 }
 
 interface SaveUploadedOwnerListingInput {
@@ -20,6 +30,14 @@ interface SaveUploadedOwnerListingInput {
   pricePerDay: number;
   unitsTotal: number;
   category: DemoCategoryKey;
+  city?: string;
+  condition?: ListingConditionId;
+  deposit?: number;
+  description?: string;
+  imageFrontUrl?: string;
+  imageBackUrl?: string;
+  imageRightUrl?: string;
+  imageLeftUrl?: string;
 }
 
 function safeParse(json: string | null): UploadedOwnerListingRecord[] {
@@ -62,6 +80,15 @@ export function saveUploadedOwnerListing(input: SaveUploadedOwnerListingInput): 
       publishedAt: formatDateLabel(new Date()),
       rentalsCount: 0,
       unitsTotal: input.unitsTotal,
+      category: input.category,
+      city: input.city,
+      condition: input.condition,
+      deposit: input.deposit,
+      description: input.description,
+      imageFrontUrl: input.imageFrontUrl,
+      imageBackUrl: input.imageBackUrl,
+      imageRightUrl: input.imageRightUrl,
+      imageLeftUrl: input.imageLeftUrl,
     };
   }
 
@@ -76,6 +103,15 @@ export function saveUploadedOwnerListing(input: SaveUploadedOwnerListingInput): 
     publishedAt: formatDateLabel(now),
     rentalsCount: 0,
     unitsTotal: input.unitsTotal,
+    category: input.category,
+    city: input.city,
+    condition: input.condition,
+    deposit: input.deposit,
+    description: input.description,
+    imageFrontUrl: input.imageFrontUrl,
+    imageBackUrl: input.imageBackUrl,
+    imageRightUrl: input.imageRightUrl,
+    imageLeftUrl: input.imageLeftUrl,
   };
 
   window.localStorage.setItem(OWNER_LISTINGS_KEY, JSON.stringify([nextItem, ...current]));

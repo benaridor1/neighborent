@@ -11,7 +11,7 @@ import {
   type ListingConditionId,
   type SearchCategoryId,
 } from "../../lib/catalog-search-constants";
-import { isUserAuthenticated } from "../../lib/auth-session";
+import { getUserProfile, isUserAuthenticated } from "../../lib/auth-session";
 import { getCityOptionsForLanguage } from "../../lib/geo-search-options";
 import { useLocale } from "../../lib/locale-context";
 import { saveUploadedOwnerListing } from "../../lib/uploaded-owner-listings";
@@ -60,6 +60,7 @@ export function UploadProductPage() {
     left: null,
   });
   const [banner, setBanner] = useState<string | null>(null);
+  const [isVerifiedUser, setIsVerifiedUser] = useState(false);
   const fileInputs = useRef<Record<PhotoSlot, HTMLInputElement | null>>({
     front: null,
     back: null,
@@ -74,6 +75,7 @@ export function UploadProductPage() {
       router.replace("/login");
       return;
     }
+    setIsVerifiedUser(getUserProfile()?.verificationStatus === "approved" || getUserProfile()?.role === "admin");
     setAuthReady(true);
   }, [router]);
 
@@ -131,6 +133,10 @@ export function UploadProductPage() {
 
   const goNext = () => {
     setBanner(null);
+    if (!isVerifiedUser) {
+      setBanner(language === "he" ? "החשבון שלך ממתין לאימות מנהל. לא ניתן לבצע העלאת מוצרים כרגע." : "Your account is pending admin verification.");
+      return;
+    }
     if (step === 1) {
       if (!validateStep1()) {
         setBanner(t("uploadErrorStep1"));
@@ -158,6 +164,10 @@ export function UploadProductPage() {
   };
 
   const saveDraft = () => {
+    if (!isVerifiedUser) {
+      setBanner(language === "he" ? "החשבון שלך ממתין לאימות מנהל. לא ניתן לבצע פעולות כרגע." : "Your account is pending admin verification.");
+      return;
+    }
     try {
       const payload = {
         category,
@@ -178,6 +188,10 @@ export function UploadProductPage() {
   };
 
   const publish = () => {
+    if (!isVerifiedUser) {
+      setBanner(language === "he" ? "החשבון שלך ממתין לאימות מנהל. לא ניתן לפרסם מוצר כרגע." : "Your account is pending admin verification.");
+      return;
+    }
     if (!validateStep1()) {
       setStep(1);
       setBanner(t("uploadErrorStep1"));
@@ -257,6 +271,14 @@ export function UploadProductPage() {
 
         {banner ? (
           <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-950">{banner}</p>
+        ) : null}
+
+        {!isVerifiedUser ? (
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm font-semibold text-red-900">
+            {language === "he"
+              ? "החשבון שלך ממתין לאימות על ידי מנהל המערכת. עד האישור לא ניתן לבצע העלאה של מוצרים."
+              : "Your account is pending admin verification. Product uploads are disabled until approval."}
+          </p>
         ) : null}
 
         {step === 1 ? (

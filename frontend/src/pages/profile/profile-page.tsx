@@ -1,8 +1,9 @@
 "use client";
 
 import { CalendarClock, CircleHelp, CreditCard, MessageSquareText, ShieldCheck, Trash2, UserRound } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "../../lib/locale-context";
+import { getUserProfile } from "../../lib/auth-session";
 
 const profileMenu = [
   { id: "identity", icon: UserRound, titleKey: "profileIdentity", subtitleKey: "profileIdentityHint" },
@@ -26,6 +27,10 @@ export function ProfilePage() {
     lastName: "Ozid",
     phone: "+972-58-426-4242",
     email: "ben@rentup.com",
+    accountType: "private" as "private" | "rental_company",
+    companyBrandName: "",
+    companyAddress: "",
+    companyContactName: "",
   });
 
   const openDealsCount = 1;
@@ -41,10 +46,27 @@ export function ProfilePage() {
     return t("profileDeleteAccount");
   }, [activeSection, t]);
 
+  useEffect(() => {
+    const storedProfile = getUserProfile();
+    if (!storedProfile) {
+      return;
+    }
+    setProfileData({
+      firstName: storedProfile.firstName || "Ben",
+      lastName: storedProfile.lastName || "Ozid",
+      phone: storedProfile.phone || "+972-58-426-4242",
+      email: storedProfile.email || "ben@rentup.com",
+      accountType: storedProfile.accountType,
+      companyBrandName: storedProfile.companyBrandName ?? "",
+      companyAddress: storedProfile.companyAddress ?? "",
+      companyContactName: storedProfile.companyContactName ?? "",
+    });
+  }, []);
+
   return (
     <main className="min-h-[calc(100vh-70px)] bg-white" dir={isRtl ? "rtl" : "ltr"}>
       <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 px-4 py-6 md:px-8 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] lg:gap-8 lg:px-10">
-        <aside className="min-w-0 max-lg:order-2 py-2 lg:order-none" aria-label={t("menuProfile")}>
+        <aside className="min-w-0 order-1 py-2 lg:order-none" aria-label={t("menuProfile")}>
           <nav className="space-y-2">
             {profileMenu.map((item) => {
               const Icon = item.icon;
@@ -71,7 +93,7 @@ export function ProfilePage() {
           </nav>
         </aside>
 
-        <section className="min-w-0 max-lg:order-1 space-y-6 border-zinc-200 lg:order-none lg:border-s lg:ps-8">
+        <section className="min-w-0 order-2 space-y-6 border-zinc-200 lg:order-none lg:border-s lg:ps-8">
           <h1 className="text-4xl font-black text-zinc-900">{t("menuProfile")}</h1>
 
           <article className="w-full min-w-0 rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-5 shadow-sm sm:px-8 sm:py-6">
@@ -83,7 +105,7 @@ export function ProfilePage() {
                 <p className="text-3xl font-black tracking-tight text-zinc-900 sm:text-4xl">
                   {[profileData.firstName, profileData.lastName].filter(Boolean).join(" ") || "—"}
                 </p>
-                <p className="mt-1 text-base text-zinc-600">{t("profileHost")}</p>
+                <p className="mt-1 text-base text-zinc-600">{profileData.accountType === "rental_company" ? "חברת השכרה" : t("profileHost")}</p>
                 <p className="mt-2 text-lg font-semibold text-zinc-900">
                   {t("profileRatingLabel")}: {rating} ★
                 </p>
@@ -116,6 +138,14 @@ export function ProfilePage() {
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="space-y-1">
+                    <span className="text-xs text-zinc-500">סוג חשבון</span>
+                    <input
+                      value={profileData.accountType === "rental_company" ? "חברת השכרה" : "משכיר פרטי"}
+                      readOnly
+                      className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700 outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
                     <span className="text-xs text-zinc-500">{t("authPhone")}</span>
                     <input
                       value={profileData.phone}
@@ -132,6 +162,34 @@ export function ProfilePage() {
                     />
                   </label>
                 </div>
+                {profileData.accountType === "rental_company" ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-500">שם המותג</span>
+                      <input
+                        value={profileData.companyBrandName}
+                        onChange={(event) => setProfileData((prev) => ({ ...prev, companyBrandName: event.target.value }))}
+                        className="h-10 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:ring-2 focus:ring-zinc-200"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-500">איש קשר</span>
+                      <input
+                        value={profileData.companyContactName}
+                        onChange={(event) => setProfileData((prev) => ({ ...prev, companyContactName: event.target.value }))}
+                        className="h-10 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:ring-2 focus:ring-zinc-200"
+                      />
+                    </label>
+                    <label className="space-y-1 md:col-span-2">
+                      <span className="text-xs text-zinc-500">כתובת מדויקת</span>
+                      <input
+                        value={profileData.companyAddress}
+                        onChange={(event) => setProfileData((prev) => ({ ...prev, companyAddress: event.target.value }))}
+                        className="h-10 w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:ring-2 focus:ring-zinc-200"
+                      />
+                    </label>
+                  </div>
+                ) : null}
                 <div className="inline-flex items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
                   <CalendarClock size={14} />
                   {t("profileJoinedAt")}: {joinedDate}

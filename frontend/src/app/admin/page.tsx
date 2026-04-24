@@ -1,10 +1,11 @@
 import { Suspense } from "react";
-import { HelpPage } from "../../pages/help/help-page";
+import { AdminPage } from "../../pages/admin/admin-page";
 
 export default function Page() {
   return (
     <Suspense fallback={null}>
-      <HelpPage />
+      <AdminPage />
     </Suspense>
   );
 }
+

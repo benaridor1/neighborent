@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { CalendarDays, Clock3, MessageCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../lib/locale-context";
 import {
@@ -40,8 +40,14 @@ import { listPendingAvailabilityRequests, mapAvailabilityRecordToListing } from 
 import {
   listUploadedOwnerListings,
   ownerUploadedListingsChangedEventName,
+  saveUploadedOwnerListing,
 } from "../../lib/uploaded-owner-listings";
 import { DynamicBackLink } from "../../components/layout/dynamic-back-link";
+import { getUserProfile } from "../../lib/auth-session";
+import type { UserRole, VerificationStatus } from "../../lib/auth-session";
+import { inferDemoCategoryFromProductId, type DemoCategoryKey } from "../../lib/demo-category-images";
+import { SEARCH_CATEGORY_IDS, SEARCH_CATEGORY_LABEL_KEYS, type SearchCategoryId } from "../../lib/catalog-search-constants";
+import type { ListingConditionId } from "../../lib/catalog-search-constants";
 
 type MainMode = "owner" | "renter";
 type AllProductsLifecycleFilter = "all" | "available" | "rented";
@@ -50,6 +56,7 @@ type AllProductsVerificationFilter = "all" | "approved" | "rejected" | "pending"
 const RENTER_SUB_URL_VALUES: MyProductRenterSub[] = ["pendingApproval", "awaitingPayment", "rentingSoon", "current", "past"];
 const OWNER_SUB_URL_VALUES: MyProductOwnerSub[] = ["available", "rentalRequestsPending", "upcomingRental", "leasedOut", "verificationStatus", "allProducts"];
 const OWNER_UNAVAILABILITY_KEY = "rentup:owner-unavailability-v1";
+const COMPANY_CATALOG_LAYOUT_KEY = "rentup:company-catalog-layout-v1";
 
 interface UnavailabilityRange {
   id: string;
@@ -75,12 +82,70 @@ interface ListingVerificationMeta {
   rejectionReason?: string;
 }
 
+type CategoryPlacement = "top" | "bottom";
+
+interface CatalogGroup {
+  id: string;
+  name: string;
+  productIds: string[];
+}
+
+interface CompanyCatalogLayout {
+  categoryPlacement: Record<SearchCategoryId, CategoryPlacement>;
+  groups: CatalogGroup[];
+}
+
 const DEMO_VERIFICATION_META_BY_LISTING_ID: Record<string, ListingVerificationMeta> = {
   p1: { status: "approved", submittedAt: "15.8.2025", verifiedAt: "16.8.2025" },
   t1: { status: "rejected", submittedAt: "3.9.2025", rejectedAt: "4.9.2025", rejectionReason: "חסרה תמונת חזית ברורה של המוצר." },
   "owner-upcoming-demo": { status: "pending", submittedAt: "21.4.2026" },
   p2: { status: "approved", submittedAt: "9.3.2025", verifiedAt: "10.3.2025" },
 };
+
+function defaultCatalogLayout(): CompanyCatalogLayout {
+  return {
+    categoryPlacement: {
+      photo: "top",
+      compute: "top",
+      construction: "top",
+      garden: "bottom",
+      sports: "bottom",
+      events: "bottom",
+    },
+    groups: [],
+  };
+}
+
+function readCompanyCatalogLayout(): CompanyCatalogLayout {
+  if (typeof window === "undefined") return defaultCatalogLayout();
+  try {
+    const raw = window.localStorage.getItem(COMPANY_CATALOG_LAYOUT_KEY);
+    if (!raw) return defaultCatalogLayout();
+    const parsed = JSON.parse(raw) as Partial<CompanyCatalogLayout>;
+    const fallback = defaultCatalogLayout();
+    const categoryPlacement = { ...fallback.categoryPlacement, ...(parsed.categoryPlacement ?? {}) };
+    const groups = Array.isArray(parsed.groups)
+      ? parsed.groups
+          .filter((g) => g && typeof g === "object")
+          .map((g) => ({
+            id: String((g as Partial<CatalogGroup>).id ?? ""),
+            name: String((g as Partial<CatalogGroup>).name ?? ""),
+            productIds: Array.isArray((g as Partial<CatalogGroup>).productIds)
+              ? (g as Partial<CatalogGroup>).productIds!.map((id) => String(id))
+              : [],
+          }))
+          .filter((g) => g.id && g.name)
+      : [];
+    return { categoryPlacement, groups };
+  } catch {
+    return defaultCatalogLayout();
+  }
+}
+
+function saveCompanyCatalogLayout(layout: CompanyCatalogLayout): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(COMPANY_CATALOG_LAYOUT_KEY, JSON.stringify(layout));
+}
 
 function readUnavailabilityByListing(): UnavailabilityByListing {
   if (typeof window === "undefined") return {};
@@ -166,6 +231,13 @@ export function MyProductsPage() {
   const [hiddenOwnerListingIds, setHiddenOwnerListingIds] = useState<string[]>([]);
   const [allProductsLifecycleFilter, setAllProductsLifecycleFilter] = useState<AllProductsLifecycleFilter>("all");
   const [allProductsVerificationFilter, setAllProductsVerificationFilter] = useState<AllProductsVerificationFilter>("all");
+  const [isCompanyAccount, setIsCompanyAccount] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>("user");
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>("pending");
+  const [catalogImportNotice, setCatalogImportNotice] = useState<string | null>(null);
+  const [catalogLayout, setCatalogLayout] = useState<CompanyCatalogLayout>(defaultCatalogLayout);
+  const [newGroupName, setNewGroupName] = useState("");
+  const catalogImportInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const hasOpenModal = Boolean(openUnavailabilityFor || openCalendarFor || receiptModal || defectModal);
@@ -203,15 +275,44 @@ export function MyProductsPage() {
   }, []);
 
   useEffect(() => {
+    const syncProfileType = () => {
+      const profile = getUserProfile();
+      setIsCompanyAccount(profile?.accountType === "rental_company");
+      setUserRole(profile?.role ?? "user");
+      setVerificationStatus(profile?.verificationStatus ?? "pending");
+    };
+    syncProfileType();
+    window.addEventListener("storage", syncProfileType);
+    return () => window.removeEventListener("storage", syncProfileType);
+  }, []);
+
+  const isVerifiedUser = verificationStatus === "approved" || userRole === "admin";
+
+  useEffect(() => {
+    if (!isCompanyAccount) return;
+    setCatalogLayout(readCompanyCatalogLayout());
+  }, [isCompanyAccount]);
+
+  useEffect(() => {
+    if (!isCompanyAccount) return;
+    setMainMode("owner");
+    setOwnerSub("allProducts");
+  }, [isCompanyAccount]);
+
+  useEffect(() => {
     if (!searchParams) return;
     const mode = searchParams.get("mode");
     const rSub = parseRenterSubParam(searchParams.get("renterSub"));
     const oSub = parseOwnerSubParam(searchParams.get("ownerSub"));
+    if (isCompanyAccount && mode === "renter") {
+      router.replace(`/my-products?mode=owner&ownerSub=${oSub ?? "allProducts"}`, { scroll: false });
+      return;
+    }
     if (mode === "renter") setMainMode("renter");
     if (mode === "owner") setMainMode("owner");
     if (rSub) setRenterSub(rSub);
     if (oSub) setOwnerSub(oSub);
-  }, [searchParams]);
+  }, [isCompanyAccount, router, searchParams]);
 
   const approvedOwnerIds = useMemo(() => {
     void ownerRequestBump;
@@ -243,9 +344,13 @@ export function MyProductsPage() {
     return postCheckoutRecords.filter((r) => !isDemoPostCheckoutRentingSoon(r));
   }, [checkoutBump, postCheckoutRecords]);
 
-  const uploadedOwnerListings = useMemo<MyProductListing[]>(() => {
+  const uploadedOwnerSource = useMemo(() => {
     void uploadedOwnerBump;
-    return listUploadedOwnerListings().map((item) => ({
+    return listUploadedOwnerListings();
+  }, [uploadedOwnerBump]);
+
+  const uploadedOwnerListings = useMemo<MyProductListing[]>(() => {
+    return uploadedOwnerSource.map((item) => ({
       id: item.id,
       name: item.name,
       imageUrl: item.imageUrl,
@@ -257,7 +362,14 @@ export function MyProductsPage() {
       unitsTotal: item.unitsTotal,
       primaryAction: "pickAvailability",
     }));
-  }, [uploadedOwnerBump]);
+  }, [uploadedOwnerSource]);
+
+  const uploadedOwnerCategoryById = useMemo(() => {
+    return uploadedOwnerSource.reduce<Record<string, DemoCategoryKey>>((acc, item) => {
+      acc[item.id] = item.category ?? inferDemoCategoryFromProductId(item.id);
+      return acc;
+    }, {});
+  }, [uploadedOwnerSource]);
 
   const unavailabilityByListing = useMemo(() => {
     void unavailabilityBump;
@@ -321,8 +433,72 @@ export function MyProductsPage() {
     cancelledBump,
   ]);
 
+  const ownerCatalogListings = useMemo(() => {
+    const ownerAll = myProductListings.filter((item) => item.ownerSub !== undefined);
+    return [...uploadedOwnerListings, ...ownerAll].filter((item) => !hiddenOwnerListingIds.includes(item.id));
+  }, [uploadedOwnerListings, hiddenOwnerListingIds]);
+
+  const updateCategoryPlacement = (category: SearchCategoryId, placement: CategoryPlacement) => {
+    setCatalogLayout((prev) => {
+      const next: CompanyCatalogLayout = {
+        ...prev,
+        categoryPlacement: { ...prev.categoryPlacement, [category]: placement },
+      };
+      saveCompanyCatalogLayout(next);
+      return next;
+    });
+  };
+
+  const createCatalogGroup = () => {
+    const trimmed = newGroupName.trim();
+    if (!trimmed) return;
+    setCatalogLayout((prev) => {
+      const next: CompanyCatalogLayout = {
+        ...prev,
+        groups: [...prev.groups, { id: `grp-${Date.now()}`, name: trimmed, productIds: [] }],
+      };
+      saveCompanyCatalogLayout(next);
+      return next;
+    });
+    setNewGroupName("");
+  };
+
+  const deleteCatalogGroup = (groupId: string) => {
+    setCatalogLayout((prev) => {
+      const next: CompanyCatalogLayout = { ...prev, groups: prev.groups.filter((group) => group.id !== groupId) };
+      saveCompanyCatalogLayout(next);
+      return next;
+    });
+  };
+
+  const toggleProductInGroup = (groupId: string, productId: string) => {
+    setCatalogLayout((prev) => {
+      const nextGroups = prev.groups.map((group) => {
+        if (group.id !== groupId) return group;
+        const hasProduct = group.productIds.includes(productId);
+        return {
+          ...group,
+          productIds: hasProduct ? group.productIds.filter((id) => id !== productId) : [...group.productIds, productId],
+        };
+      });
+      const next: CompanyCatalogLayout = { ...prev, groups: nextGroups };
+      saveCompanyCatalogLayout(next);
+      return next;
+    });
+  };
+
+  function listingCategory(item: MyProductListing): SearchCategoryId {
+    const inferred = item.id.startsWith("upl-")
+      ? uploadedOwnerCategoryById[item.id] ?? "photo"
+      : inferDemoCategoryFromProductId(item.id);
+    return (SEARCH_CATEGORY_IDS.includes(inferred as SearchCategoryId) ? inferred : "photo") as SearchCategoryId;
+  }
+
   const selectMainMode = useCallback(
     (mode: MainMode) => {
+      if (isCompanyAccount && mode === "renter") {
+        return;
+      }
       setMainMode(mode);
       if (mode === "owner") {
         router.replace(`/my-products?mode=owner&ownerSub=${ownerSub}`, { scroll: false });
@@ -330,7 +506,7 @@ export function MyProductsPage() {
         router.replace(`/my-products?mode=renter&renterSub=${renterSub}`, { scroll: false });
       }
     },
-    [ownerSub, renterSub, router],
+    [isCompanyAccount, ownerSub, renterSub, router],
   );
 
   const selectOwnerSub = useCallback(
@@ -671,6 +847,148 @@ export function MyProductsPage() {
     return d.toLocaleDateString(language === "he" || language === "ar" ? "he-IL" : "en-GB");
   }
 
+  function companyCatalogIntroLabel() {
+    if (language === "he") return "ניהול קטלוג חברת ההשכרה: העלאה ידנית או ייבוא מרוכז מקובץ CSV.";
+    return "Manage your rental company catalog: manual listing or CSV bulk import.";
+  }
+
+  function companyCatalogTemplateLabel() {
+    if (language === "he") return "הורדת תבנית CSV";
+    return "Download CSV template";
+  }
+
+  function companyCatalogImportLabel() {
+    if (language === "he") return "ייבוא קטלוג מקובץ";
+    return "Import catalog file";
+  }
+
+  function parseCatalogCategory(raw: string): DemoCategoryKey {
+    const value = raw.trim().toLowerCase();
+    if (value === "photo" || value === "צילום") return "photo";
+    if (value === "compute" || value === "computing" || value === "מחשוב") return "compute";
+    if (value === "construction" || value === "בנייה" || value === "ציוד בנייה") return "construction";
+    if (value === "garden" || value === "גינון") return "garden";
+    if (value === "sports" || value === "ספורט") return "sports";
+    if (value === "events" || value === "אירועים") return "events";
+    return "photo";
+  }
+
+  function parseListingCondition(raw: string): ListingConditionId {
+    const value = raw.trim().toLowerCase();
+    if (value === "new" || value === "חדש") return "new";
+    if (value === "like_new" || value === "like-new" || value === "כמו חדש") return "like_new";
+    return "used";
+  }
+
+  function parseCsvLine(line: string): string[] {
+    const cells: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      if (char === "\"") {
+        const next = line[i + 1];
+        if (inQuotes && next === "\"") {
+          current += "\"";
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (char === "," && !inQuotes) {
+        cells.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += char;
+    }
+    cells.push(current.trim());
+    return cells;
+  }
+
+  async function importCatalogFile(file: File) {
+    try {
+      const text = await file.text();
+      const lines = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (lines.length <= 1) {
+        setCatalogImportNotice(language === "he" ? "לא נמצאו שורות לייבוא בקובץ." : "No rows found in file.");
+        return;
+      }
+
+      const headerCells = parseCsvLine(lines[0]).map((cell) => cell.toLowerCase());
+      const headerIndex: Record<string, number> = {};
+      headerCells.forEach((header, idx) => {
+        headerIndex[header] = idx;
+      });
+      const hasHeader = Boolean(
+        headerIndex.name !== undefined &&
+        headerIndex.priceperday !== undefined &&
+        headerIndex.unitstotal !== undefined &&
+        headerIndex.category !== undefined,
+      );
+      const dataLines = hasHeader ? lines.slice(1) : lines;
+      let importedCount = 0;
+      for (const line of dataLines) {
+        const cells = parseCsvLine(line);
+        const getCell = (key: string, fallbackIdx: number) => {
+          const idx = headerIndex[key];
+          return cells[idx ?? fallbackIdx] ?? "";
+        };
+
+        const name = getCell("name", 0);
+        const priceRaw = getCell("priceperday", 1);
+        const unitsRaw = getCell("unitstotal", 2);
+        const categoryRaw = getCell("category", 3);
+        const city = getCell("city", 4);
+        const conditionRaw = getCell("condition", 5);
+        const depositRaw = getCell("deposit", 6);
+        const description = getCell("description", 7);
+        const imageFrontUrl = getCell("imagefronturl", 8);
+        const imageBackUrl = getCell("imagebackurl", 9);
+        const imageRightUrl = getCell("imagerighturl", 10);
+        const imageLeftUrl = getCell("imagelefturl", 11);
+
+        const pricePerDay = Number(priceRaw);
+        const unitsTotal = Number(unitsRaw);
+        const deposit = Number(depositRaw);
+        if (!name || Number.isNaN(pricePerDay) || pricePerDay <= 0 || Number.isNaN(unitsTotal) || unitsTotal <= 0) {
+          continue;
+        }
+        saveUploadedOwnerListing({
+          name,
+          pricePerDay,
+          unitsTotal: Math.floor(unitsTotal),
+          category: parseCatalogCategory(categoryRaw ?? ""),
+          city: city || undefined,
+          condition: parseListingCondition(conditionRaw || ""),
+          deposit: Number.isNaN(deposit) ? undefined : deposit,
+          description: description || undefined,
+          imageFrontUrl: imageFrontUrl || undefined,
+          imageBackUrl: imageBackUrl || undefined,
+          imageRightUrl: imageRightUrl || undefined,
+          imageLeftUrl: imageLeftUrl || undefined,
+        });
+        importedCount += 1;
+      }
+
+      setCatalogImportNotice(
+        importedCount > 0
+          ? language === "he"
+            ? `יובאו ${importedCount} מוצרים לקטלוג בהצלחה.`
+            : `Imported ${importedCount} catalog items successfully.`
+          : language === "he"
+            ? "לא יובאו מוצרים. בדקו שהפורמט תואם לתבנית."
+            : "No products imported. Check template format.",
+      );
+    } catch {
+      setCatalogImportNotice(language === "he" ? "ייבוא הקובץ נכשל. נסו שוב." : "File import failed. Please try again.");
+    }
+  }
+
   function renderPostCheckoutCard(rec: DemoPostCheckoutRecord, variant: "active" | "soon" = "active") {
     void receiptBump;
     const isSoon = variant === "soon";
@@ -769,7 +1087,15 @@ export function MyProductsPage() {
   return (
     <main className="min-h-[calc(100vh-70px)] bg-zinc-50/80" dir={isRtl ? "rtl" : "ltr"}>
       <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 lg:px-10">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {!isVerifiedUser ? (
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm font-semibold text-red-900">
+            {language === "he"
+              ? "החשבון שלך ממתין לאימות מנהל. לא ניתן לבצע פעולות עד לאישור."
+              : "Your account is pending admin verification. Actions are disabled until approval."}
+          </p>
+        ) : null}
+
+        <div className={`mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${!isVerifiedUser ? "pointer-events-none opacity-60" : ""}`}>
           <DynamicBackLink className={`inline-flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900 ${isRtl ? "self-end sm:self-auto" : "self-start sm:self-auto"}`} />
           <Link
             href="/upload-product"
@@ -781,33 +1107,165 @@ export function MyProductsPage() {
 
         <header className="mb-6 rounded-2xl border border-zinc-200 bg-white px-5 py-5 shadow-sm sm:px-8">
           <h1 className="text-3xl font-black tracking-tight text-zinc-900 sm:text-4xl">{t("menuRentals")}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-600">{t("myProductsIntro")}</p>
+          <p className="mt-1 max-w-2xl text-sm text-zinc-600">{isCompanyAccount ? companyCatalogIntroLabel() : t("myProductsIntro")}</p>
         </header>
 
-        <div
-          role="tablist"
-          aria-label={t("myProductsAriaMain")}
-          className="mb-3 flex flex-wrap gap-2 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mainMode === "owner"}
-            onClick={() => selectMainMode("owner")}
-            className={`${tabButton} ${mainMode === "owner" ? "bg-emerald-950 text-white shadow-sm" : "text-zinc-700 hover:bg-zinc-50"}`}
+        {isCompanyAccount ? (
+          <section className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-zinc-700">
+                {language === "he"
+                  ? "אפשר להעלות את קטלוג המוצרים שלך בקובץ CSV לפי הפורמט המוכן."
+                  : "You can upload your catalog in CSV using the provided template."}
+              </p>
+              <div className={`flex flex-wrap gap-2 ${isRtl ? "sm:flex-row-reverse" : ""}`}>
+                <a
+                  href="/company-catalog-template.csv"
+                  download
+                  className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+                >
+                  {companyCatalogTemplateLabel()}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => catalogImportInputRef.current?.click()}
+                  className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-emerald-950 px-4 text-sm font-semibold text-white hover:bg-emerald-900"
+                >
+                  {companyCatalogImportLabel()}
+                </button>
+                <input
+                  ref={catalogImportInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void importCatalogFile(file);
+                    }
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </div>
+            </div>
+            {catalogImportNotice ? <p className="mt-3 text-sm font-medium text-emerald-900">{catalogImportNotice}</p> : null}
+          </section>
+        ) : null}
+
+        {isCompanyAccount && ownerSub === "allProducts" ? (
+          <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+            <h2 className="text-lg font-bold text-zinc-900">
+              {language === "he" ? "ארגון תצוגת הקטלוג: קטגוריות וקבוצות" : "Catalog layout: categories and groups"}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              {language === "he"
+                ? "בחרו אילו קטגוריות להציג למעלה/למטה וצרו קבוצות מותאמות (למשל: כיסאות גבוהים)."
+                : "Choose category placement and build custom groups (for example: high chairs)."}
+            </p>
+
+            <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+              <p className="text-sm font-semibold text-zinc-900">{language === "he" ? "מיקום קטגוריות בדף" : "Category placement on page"}</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {SEARCH_CATEGORY_IDS.map((categoryId) => (
+                  <label key={categoryId} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                    <span className="text-sm font-medium text-zinc-800">{t(SEARCH_CATEGORY_LABEL_KEYS[categoryId])}</span>
+                    <select
+                      value={catalogLayout.categoryPlacement[categoryId] ?? "top"}
+                      onChange={(event) => updateCategoryPlacement(categoryId, event.target.value as CategoryPlacement)}
+                      className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-700"
+                    >
+                      <option value="top">{language === "he" ? "למעלה" : "Top"}</option>
+                      <option value="bottom">{language === "he" ? "למטה" : "Bottom"}</option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+              <p className="text-sm font-semibold text-zinc-900">{language === "he" ? "קבוצות מותאמות לקטלוג" : "Custom catalog groups"}</p>
+              <div className={`mt-3 flex flex-col gap-2 sm:flex-row ${isRtl ? "sm:flex-row-reverse" : ""}`}>
+                <input
+                  value={newGroupName}
+                  onChange={(event) => setNewGroupName(event.target.value)}
+                  placeholder={language === "he" ? "שם קבוצה חדשה (לדוגמה: כיסאות גבוהים)" : "New group name"}
+                  className="h-10 flex-1 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={createCatalogGroup}
+                  className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-emerald-950 px-4 text-sm font-semibold text-white hover:bg-emerald-900"
+                >
+                  {language === "he" ? "יצירת קבוצה" : "Create group"}
+                </button>
+              </div>
+
+              {catalogLayout.groups.length === 0 ? (
+                <p className="mt-3 text-sm text-zinc-600">{language === "he" ? "עדיין לא נוצרו קבוצות." : "No groups yet."}</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {catalogLayout.groups.map((group) => (
+                    <article key={group.id} className="rounded-xl border border-zinc-200 bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-zinc-900">{group.name}</p>
+                        <button
+                          type="button"
+                          onClick={() => deleteCatalogGroup(group.id)}
+                          className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                        >
+                          {language === "he" ? "מחיקת קבוצה" : "Delete group"}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {language === "he" ? `מוצרים בקבוצה: ${group.productIds.length}` : `Products in group: ${group.productIds.length}`}
+                      </p>
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {ownerCatalogListings.slice(0, 30).map((item) => {
+                          const category = listingCategory(item);
+                          const checked = group.productIds.includes(item.id);
+                          return (
+                            <label key={`${group.id}-${item.id}`} className="flex items-center gap-2 rounded-lg border border-zinc-200 px-2 py-1.5 text-sm">
+                              <input type="checkbox" checked={checked} onChange={() => toggleProductInGroup(group.id, item.id)} />
+                              <span className="truncate text-zinc-800">{item.name}</span>
+                              <span className="ms-auto text-[11px] text-zinc-500">{t(SEARCH_CATEGORY_LABEL_KEYS[category])}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {!isCompanyAccount ? (
+          <div
+            role="tablist"
+            aria-label={t("myProductsAriaMain")}
+            className="mb-3 flex flex-wrap gap-2 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm"
           >
-            {t("myProductsMainOwner")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mainMode === "renter"}
-            onClick={() => selectMainMode("renter")}
-            className={`${tabButton} ${mainMode === "renter" ? "bg-emerald-950 text-white shadow-sm" : "text-zinc-700 hover:bg-zinc-50"}`}
-          >
-            {t("myProductsMainRenter")}
-          </button>
-        </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mainMode === "owner"}
+              onClick={() => selectMainMode("owner")}
+              className={`${tabButton} ${mainMode === "owner" ? "bg-emerald-950 text-white shadow-sm" : "text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              {t("myProductsMainOwner")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mainMode === "renter"}
+              onClick={() => selectMainMode("renter")}
+              className={`${tabButton} ${mainMode === "renter" ? "bg-emerald-950 text-white shadow-sm" : "text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              {t("myProductsMainRenter")}
+            </button>
+          </div>
+        ) : null}
 
         {mainMode === "owner" ? (
           <div
@@ -833,6 +1291,28 @@ export function MyProductsPage() {
             >
               {t("myProductsOwnerRentalRequests")}
             </button>
+            {!isCompanyAccount ? (
+              <>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={ownerSub === "upcomingRental"}
+                  onClick={() => selectOwnerSub("upcomingRental")}
+                  className={`${tabButton} ${ownerSub === "upcomingRental" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
+                >
+                  {t("myProductsOwnerUpcoming")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={ownerSub === "leasedOut"}
+                  onClick={() => selectOwnerSub("leasedOut")}
+                  className={`${tabButton} ${ownerSub === "leasedOut" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
+                >
+                  {t("myProductsOwnerLeased")}
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               role="tab"
@@ -841,24 +1321,6 @@ export function MyProductsPage() {
               className={`${tabButton} ${ownerSub === "available" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
             >
               {t("myProductsOwnerAvailable")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={ownerSub === "upcomingRental"}
-              onClick={() => selectOwnerSub("upcomingRental")}
-              className={`${tabButton} ${ownerSub === "upcomingRental" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
-            >
-              {t("myProductsOwnerUpcoming")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={ownerSub === "leasedOut"}
-              onClick={() => selectOwnerSub("leasedOut")}
-              className={`${tabButton} ${ownerSub === "leasedOut" ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200" : "text-zinc-700 hover:bg-zinc-50"}`}
-            >
-              {t("myProductsOwnerLeased")}
             </button>
             <button
               type="button"
@@ -980,7 +1442,7 @@ export function MyProductsPage() {
           {filtered.length === 0 && !showPostCheckout && !showPostCheckoutSoon ? (
             <p className="rounded-2xl border border-zinc-200 bg-white px-5 py-10 text-center text-sm text-zinc-600">{t("myProductsEmpty")}</p>
           ) : filtered.length === 0 ? null : (
-            filtered.map((item) => {
+            filtered.map((item, index) => {
               const effectiveName = item.name;
               const effectivePricePerDay = item.pricePerDay;
               const effectiveUnitsRaw = item.unitsTotal;
@@ -990,6 +1452,7 @@ export function MyProductsPage() {
               const verificationSubmittedAt = verificationMeta?.submittedAt ?? (isUploadedItem ? todayLabel() : item.publishedAt);
               const verificationApprovedAt = verificationMeta?.verifiedAt ?? (verificationStatus === "approved" ? item.publishedAt : undefined);
               const owner = isOwnerListing(item);
+              const listItemKey = `${mainMode}-${item.id}-${owner ? item.ownerSub : item.renterSub}-${index}`;
               const isVerificationTab = owner && ownerSub === "verificationStatus";
               const isAllProductsTab = owner && ownerSub === "allProducts";
               const ownerAvailable = owner && item.ownerSub === "available";
@@ -1020,7 +1483,7 @@ export function MyProductsPage() {
               if (isVerificationTab) {
                 return (
                   <article
-                    key={`${mainMode}-${item.id}-${owner ? item.ownerSub : item.renterSub}`}
+                    key={listItemKey}
                     className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
                   >
                     <div className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between ${isRtl ? "text-right" : "text-left"}`}>
@@ -1064,7 +1527,7 @@ export function MyProductsPage() {
 
               return (
                 <article
-                  key={`${mainMode}-${item.id}-${owner ? item.ownerSub : item.renterSub}`}
+                  key={listItemKey}
                   className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:border-zinc-300"
                 >
                   <div className="flex flex-col gap-5 p-4 sm:p-5 md:flex-row md:items-stretch md:gap-4">

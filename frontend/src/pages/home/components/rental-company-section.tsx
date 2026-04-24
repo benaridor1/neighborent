@@ -26,8 +26,8 @@ export function RentalCompanySection({ category, display = "carousel", onSeeAll 
   if (display === "grid") {
     return (
       <section className="space-y-4 border-t border-zinc-200 pt-5 first:border-0 first:pt-0" dir={isRtl ? "rtl" : "ltr"}>
-        <h2 className="text-[33px] leading-none font-black text-zinc-900">{categoryTitle}</h2>
-        <div className="grid grid-cols-2 justify-items-stretch gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <h2 className="text-[26px] leading-none font-black text-zinc-900 sm:text-[33px]">{categoryTitle}</h2>
+        <div className="grid grid-cols-1 justify-items-stretch gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {category.companies.map((company) => (
             <RentalCompanyCard key={company.id} company={company} layout="grid" />
           ))}
@@ -38,15 +38,15 @@ export function RentalCompanySection({ category, display = "carousel", onSeeAll 
 
   return (
     <section className="space-y-2 border-t border-zinc-200 pt-5 first:border-0 first:pt-0" dir={isRtl ? "rtl" : "ltr"}>
-      <h2 className="text-[33px] leading-none font-black text-zinc-900">{categoryTitle}</h2>
-      <div className="flex w-full items-start justify-between gap-3">
+      <h2 className="text-[26px] leading-none font-black text-zinc-900 sm:text-[33px]">{categoryTitle}</h2>
+      <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="flex min-w-0 max-w-full flex-1 gap-2 overflow-x-auto pb-2">
           {category.companies.map((company) => (
             <RentalCompanyCard key={company.id} company={company} />
           ))}
         </div>
         {onSeeAll ? (
-          <div className="flex shrink-0 self-center">
+          <div className="flex shrink-0 self-start sm:self-center">
             <button
               type="button"
               onClick={onSeeAll}

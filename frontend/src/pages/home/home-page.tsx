@@ -11,6 +11,9 @@ import { HomeCard } from "./components/home-card";
 import { RentalCompanyCard } from "./components/rental-company-card";
 import { RentalCompanySection } from "./components/rental-company-section";
 import { useLocale } from "../../lib/locale-context";
+import { getAuthChangeEventName, getUserProfile, isUserAuthenticated } from "../../lib/auth-session";
+import { listUploadedOwnerListings } from "../../lib/uploaded-owner-listings";
+import Link from "next/link";
 
 interface SearchState {
   city: string;
@@ -62,6 +65,8 @@ type CategoryBrowse = { mode: "private"; categoryId: string } | { mode: "company
 export function HomePage() {
   const { language, t } = useLocale();
   const isRtl = language === "he" || language === "ar";
+  const [isCompanyAccount, setIsCompanyAccount] = useState(false);
+  const [isVerifiedUser, setIsVerifiedUser] = useState(true);
   const [lenderType, setLenderType] = useState<LenderType>("private");
   const [searchState, setSearchState] = useState<SearchState | null>(null);
   const [categoryBrowse, setCategoryBrowse] = useState<CategoryBrowse | null>(null);
@@ -122,6 +127,24 @@ export function HomePage() {
   }, [language, t]);
 
   useEffect(() => {
+    const syncAccountType = () => {
+      const profile = getUserProfile();
+      const auth = isUserAuthenticated();
+      setIsCompanyAccount(auth && profile?.accountType === "rental_company");
+      setIsVerifiedUser(!auth || profile?.verificationStatus === "approved" || profile?.role === "admin");
+    };
+    syncAccountType();
+    const authEventName = getAuthChangeEventName();
+    const onAuthChanged = () => syncAccountType();
+    window.addEventListener("storage", syncAccountType);
+    window.addEventListener(authEventName, onAuthChanged);
+    return () => {
+      window.removeEventListener("storage", syncAccountType);
+      window.removeEventListener(authEventName, onAuthChanged);
+    };
+  }, []);
+
+  useEffect(() => {
     if (categoryBrowse) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -168,9 +191,92 @@ export function HomePage() {
         return categoryMatch ? getCategoryLabel(categoryMatch.id.replace("-companies", ""), categoryMatch.title) === selectedSubcategory : false;
       });
 
+  const uploadedCatalogItems = isCompanyAccount ? listUploadedOwnerListings() : [];
+  const catalogItemsCount = uploadedCatalogItems.length;
+  const averageCatalogPrice =
+    catalogItemsCount > 0
+      ? Math.round(uploadedCatalogItems.reduce((sum, item) => sum + item.pricePerDay, 0) / catalogItemsCount)
+      : 0;
+  const totalUnitsInCatalog = uploadedCatalogItems.reduce((sum, item) => sum + Math.max(1, item.unitsTotal), 0);
+
+  if (isCompanyAccount) {
+    const title = language === "he" ? "מרכז הניהול של חברת ההשכרה" : "Rental company control center";
+    const subtitle =
+      language === "he"
+        ? "כאן מנהלים את קטלוג המוצרים, מעדכנים זמינות ועוקבים אחרי ביצועים בפלטפורמה."
+        : "Manage your catalog, update availability, and monitor performance from one place.";
+    const catalogStatus =
+      language === "he"
+        ? `יש לכם כרגע ${catalogItemsCount} מוצרים בקטלוג ו-${totalUnitsInCatalog} יחידות זמינות.`
+        : `You currently have ${catalogItemsCount} catalog products and ${totalUnitsInCatalog} available units.`;
+
+    return (
+      <main className="bg-white">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-3 py-4 sm:px-4 md:px-8 lg:px-10" dir={isRtl ? "rtl" : "ltr"}>
+          <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7">
+            <h1 className="text-2xl font-black text-zinc-900 sm:text-3xl">{title}</h1>
+            <p className="mt-2 max-w-3xl text-sm text-zinc-600">{subtitle}</p>
+            {!isVerifiedUser ? (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
+                {language === "he"
+                  ? "החשבון ממתין לאימות מנהל ולכן פעולות ניהול קטלוג חסומות כרגע."
+                  : "Your account is pending admin verification, so catalog actions are currently blocked."}
+              </p>
+            ) : null}
+            <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm font-medium text-emerald-900">{catalogStatus}</p>
+            <div className={`mt-4 flex flex-wrap gap-2 ${isRtl ? "sm:flex-row-reverse" : ""}`}>
+              <Link
+                href="/catalog-management"
+                className={`inline-flex min-h-[44px] items-center justify-center rounded-xl px-5 text-sm font-semibold shadow-sm ${
+                  isVerifiedUser ? "bg-emerald-950 text-white hover:bg-emerald-900" : "pointer-events-none bg-zinc-300 text-white"
+                }`}
+              >
+                {language === "he" ? "עיצוב הקטלוג" : "Catalog design"}
+              </Link>
+              <Link
+                href="/my-products?mode=owner&ownerSub=allProducts"
+                className={`inline-flex min-h-[44px] items-center justify-center rounded-xl border px-5 text-sm font-semibold ${
+                  isVerifiedUser ? "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50" : "pointer-events-none border-zinc-200 bg-zinc-100 text-zinc-400"
+                }`}
+              >
+                {language === "he" ? "המוצרים שלי" : "My products"}
+              </Link>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <article className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
+              <p className="text-xs text-zinc-500">{language === "he" ? "מוצרים בקטלוג" : "Catalog products"}</p>
+              <p className="mt-1 text-2xl font-black text-zinc-900">{catalogItemsCount}</p>
+            </article>
+            <article className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
+              <p className="text-xs text-zinc-500">{language === "he" ? "סה\"כ יחידות זמינות" : "Total available units"}</p>
+              <p className="mt-1 text-2xl font-black text-zinc-900">{totalUnitsInCatalog}</p>
+            </article>
+            <article className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
+              <p className="text-xs text-zinc-500">{language === "he" ? "מחיר יומי ממוצע" : "Average daily price"}</p>
+              <p className="mt-1 text-2xl font-black text-zinc-900">
+                {averageCatalogPrice > 0 ? `${averageCatalogPrice} ${language === "he" ? "₪" : "ILS"}` : "-"}
+              </p>
+            </article>
+          </section>
+
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <h2 className="text-lg font-bold text-zinc-900">{language === "he" ? "מה מומלץ לעשות עכשיו?" : "What should you do next?"}</h2>
+            <ul className={`mt-3 space-y-2 text-sm text-zinc-700 ${isRtl ? "text-right" : "text-left"}`}>
+              <li>{language === "he" ? "1. העלו את כל מוצרי החברה לקיטלוג דרך קובץ CSV או ידנית." : "1. Upload your full catalog via CSV or manually."}</li>
+              <li>{language === "he" ? "2. הגדירו זמינות לכל מוצר כדי להפחית ביטולים." : "2. Set product availability to reduce cancellations."}</li>
+              <li>{language === "he" ? "3. שמרו על תמונות איכותיות ותיאור ברור לכל פריט." : "3. Keep high-quality photos and clear descriptions for each item."}</li>
+            </ul>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="bg-white">
-      <div className="flex w-full flex-col gap-5 px-4 py-3 md:px-8 lg:px-10">
+      <div className="flex w-full flex-col gap-5 px-3 py-3 sm:px-4 md:px-8 lg:px-10">
         <HomeSearch
           onSearch={(payload) => {
             setCategoryBrowse(null);
@@ -217,8 +323,8 @@ export function HomePage() {
 
         {searchState ? (
           <section className="space-y-3" dir={isRtl ? "rtl" : "ltr"}>
-            <h2 className="text-3xl font-black text-zinc-900">{t("searchResults")}</h2>
-            <div className="flex flex-wrap gap-3">
+            <h2 className="text-2xl font-black text-zinc-900 sm:text-3xl">{t("searchResults")}</h2>
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {lenderType === "private" &&
                 searchProductsToRender.map((product) => <HomeCard key={product.id} product={product} />)}
               {lenderType === "company" &&
@@ -237,8 +343,8 @@ export function HomePage() {
               <ArrowLeft className={isRtl ? "rotate-180" : ""} size={18} aria-hidden />
               {t("backToHome")}
             </button>
-            <h2 className="text-3xl font-black text-zinc-900">{browseSectionTitle}</h2>
-            <div className="grid grid-cols-2 justify-items-stretch gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <h2 className="text-2xl font-black text-zinc-900 sm:text-3xl">{browseSectionTitle}</h2>
+            <div className="grid grid-cols-1 justify-items-stretch gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {categoryBrowse.mode === "private" &&
                 browsePrivateProducts.map((product) => <HomeCard key={product.id} product={product} layout="grid" />)}
               {categoryBrowse.mode === "company" &&

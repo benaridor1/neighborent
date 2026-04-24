@@ -7,6 +7,7 @@ import { LocaleProvider } from "../../lib/locale-context";
 import { LocaleCurrencyModal } from "./locale-currency-modal";
 import { useEffect } from "react";
 import { rememberNavigation } from "../../lib/navigation-history";
+import { clearAuthentication } from "../../lib/auth-session";
 
 interface SiteShellProps {
   children: React.ReactNode;
@@ -18,6 +19,11 @@ export function SiteShell({ children }: SiteShellProps) {
   const hideHeader = pathname === "/login" || pathname === "/register";
   const hideFooter = pathname === "/login" || pathname === "/register";
   const query = searchParams?.toString() ?? "";
+
+  useEffect(() => {
+    // Demo behavior: each full app load starts as guest.
+    clearAuthentication();
+  }, []);
 
   useEffect(() => {
     const path = pathname ?? "";
